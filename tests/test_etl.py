@@ -32,6 +32,7 @@ def test_csv_pipeline_trims_deduplicates_and_loads_shared_layers(tmp_path, monke
         trim_text=True,
         drop_duplicates=True,
         drop_empty_rows=True,
+        business_context="Customer delivery dataset used for the retail demo.",
     )
 
     assert report["status"] == "READY"
@@ -39,6 +40,9 @@ def test_csv_pipeline_trims_deduplicates_and_loads_shared_layers(tmp_path, monke
     assert report["rows_after"] == 2
     assert report["duplicates_removed"] == 1
     assert report["analysis_table"] == "silver_data"
+    assert report["business_context"] == "Customer delivery dataset used for the retail demo."
+    assert "customer" in report["column_profile"]
+    assert "city" in report["semantic_catalog"]["dimensions"]
     assert manifest_path.is_file()
     assert (pipeline_dir / "bronze" / "source.csv").is_file()
     assert (pipeline_dir / "silver" / "cleaned.csv").is_file()
@@ -58,6 +62,8 @@ def test_csv_pipeline_trims_deduplicates_and_loads_shared_layers(tmp_path, monke
     assert schema["pipeline_id"] == report["pipeline_id"]
     assert schema["table"] == "silver_data"
     assert "customer" in schema["columns"]
+    assert schema["business_context"] == "Customer delivery dataset used for the retail demo."
+    assert "customer" in schema["column_profile"]
     query = sql_module.execute_readonly_query(
         report["database"],
         "SELECT customer FROM silver_data ORDER BY customer",
