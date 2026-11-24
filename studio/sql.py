@@ -100,6 +100,10 @@ def describe_pipeline_schema() -> dict[str, Any]:
         "dataset": manifest["dataset"],
         "table": "silver_data",
         "columns": columns,
+        "column_profile": manifest.get("column_profile", {}),
+        "semantic_catalog": manifest.get("semantic_catalog", {}),
+        "business_context": manifest.get("business_context", ""),
+        "row_count_after_cleaning": manifest.get("rows_after"),
         "sample_rows": sample,
     }
 
