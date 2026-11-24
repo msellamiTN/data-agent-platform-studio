@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from .config import MAX_SQL_ROWS, SAMPLE_SALES_CSV, WORKSPACE_DIR
+from .config import MAX_SQL_ROWS, MAX_UPLOAD_BYTES, SAMPLE_SALES_CSV, WORKSPACE_DIR
 
 
 def build_sales_database(csv_path: str | Path | None = None) -> Path:
@@ -16,8 +16,14 @@ def build_sales_database(csv_path: str | Path | None = None) -> Path:
     source = Path(csv_path) if csv_path else SAMPLE_SALES_CSV
     if not source.is_file():
         raise FileNotFoundError(f"Sales CSV not found: {source}")
+    if source.suffix.lower() != ".csv":
+        raise ValueError("The analysis upload must be a CSV file.")
+    if source.stat().st_size > MAX_UPLOAD_BYTES:
+        raise ValueError("Sales CSV exceeds the configured upload size limit.")
 
     frame = pd.read_csv(source)
+    if frame.empty:
+        raise ValueError("The sales dataset is empty.")
     frame.columns = [
         re.sub(r"[^a-z0-9_]+", "_", str(column).strip().lower()).strip("_")
         for column in frame.columns
@@ -34,10 +40,20 @@ def build_sales_database(csv_path: str | Path | None = None) -> Path:
                 "Add a 'revenue' column or both 'quantity' and 'unit_price'."
             )
 
+    frame["revenue"] = pd.to_numeric(frame["revenue"], errors="coerce")
+    frame["region"] = frame["region"].astype("string").str.strip()
+    frame = frame.dropna(subset=["region", "revenue"])
+    if frame.empty:
+        raise ValueError("No rows have both a valid region and numeric revenue.")
+
     if "order_date" not in frame.columns:
         frame["order_date"] = "2026-01-01"
+    else:
+        frame["order_date"] = frame["order_date"].astype("string").str.strip()
     if "product" not in frame.columns:
         frame["product"] = "Unknown"
+    else:
+        frame["product"] = frame["product"].astype("string").str.strip()
 
     run_dir = WORKSPACE_DIR / f"analysis_{uuid.uuid4().hex[:10]}"
     run_dir.mkdir(parents=True, exist_ok=True)
