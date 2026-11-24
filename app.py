@@ -24,6 +24,7 @@ def _engineering_handler(
     trim_text: bool,
     drop_duplicates: bool,
     drop_empty_rows: bool,
+    business_context: str,
 ):
     upload_path = (
         upload if isinstance(upload, str)
@@ -36,6 +37,7 @@ def _engineering_handler(
             trim_text=trim_text,
             drop_duplicates=drop_duplicates,
             drop_empty_rows=drop_empty_rows,
+            business_context=business_context,
         )
         mode_note = (
             "CrewAI called the bounded pipeline tool."
@@ -131,6 +133,11 @@ with gr.Blocks(
                     de_trim = gr.Checkbox(value=True, label="Trim text fields")
                     de_duplicates = gr.Checkbox(value=True, label="Remove exact duplicates")
                     de_empty = gr.Checkbox(value=True, label="Remove fully empty rows")
+                    de_context = gr.Textbox(
+                        label="Business context / dataset description (optional)",
+                        placeholder="Example: Retail sales by product, region and order date. Revenue is net sales in TND.",
+                        lines=3,
+                    )
                     de_run = gr.Button("Run Data Engineering Agent", variant="primary")
                 with gr.Column(scale=2):
                     de_summary = gr.Markdown("Run the pipeline to prepare the shared dataset.")
@@ -141,7 +148,7 @@ with gr.Blocks(
             de_manifest = gr.JSON(label="Active pipeline manifest")
             de_run.click(
                 _engineering_handler,
-                inputs=[de_file, de_trim, de_duplicates, de_empty],
+                inputs=[de_file, de_trim, de_duplicates, de_empty, de_context],
                 outputs=[de_report, de_download, de_preview, de_manifest, de_summary],
             )
 
@@ -184,10 +191,10 @@ with gr.Blocks(
     gr.Markdown(
         """
         ---
-        **Platform capabilities:** shared pipeline manifest, schema awareness, data-quality
-        metadata, source-to-Gold lineage, bounded CrewAI tools, SQL read-only policy,
-        result limits and an execution trace. The platform is vendor-independent; it does
-        not call external Genie, Cortex or hosted-agent APIs.
+        **Platform capabilities:** shared pipeline manifest, schema and semantic metadata,
+        user-supplied business context, data-quality profiling, source-to-Gold lineage,
+        bounded CrewAI tools, SQL read-only policy, result limits and execution trace.
+        Both agents run independently on the local Colab GPU; no external agent service is called.
         """
     )
 
