@@ -61,8 +61,12 @@ def _extract_genie_answer(message: dict[str, Any]) -> tuple[str, str, str]:
         query_attachment = attachment.get("query") or {}
         if query_attachment.get("query") and not sql:
             sql = str(query_attachment["query"])
-            attachment_id = (
-                str(attachment.get("attachment_id") or query_attachment.get("attachment_id") or "")
+            attachment_id = str(
+                attachment.get("attachment_id")
+                or attachment.get("id")
+                or query_attachment.get("attachment_id")
+                or query_attachment.get("id")
+                or ""
             )
     return "\n\n".join(answers).strip(), sql, attachment_id
 
@@ -195,6 +199,45 @@ def _find_sql(value: Any) -> str:
     return ""
 
 
+def _find_structured_result_set(value: Any) -> dict[str, Any] | None:
+    """Find a Snowflake result_set object embedded in a response content item."""
+    if isinstance(value, dict):
+        result_set = value.get("result_set") or value.get("resultSet")
+        if isinstance(result_set, dict):
+            metadata = result_set.get("resultSetMetaData") or result_set.get("result_set_meta_data") or {}
+            row_type = metadata.get("rowType") or metadata.get("row_type") or []
+            data = result_set.get("data") or result_set.get("rows") or []
+            if row_type and isinstance(data, list):
+                return {"row_type": row_type, "data": data}
+        for item in value.values():
+            found = _find_structured_result_set(item)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for item in value:
+            found = _find_structured_result_set(item)
+            if found:
+                return found
+    return None
+
+
+def _normalise_snowflake_rows(content: Any) -> tuple[list[str], list[dict[str, Any]]]:
+    """Normalize only structured row data supplied by Cortex; never parse numbers from prose."""
+    result_set = _find_structured_result_set(content)
+    if not result_set:
+        return [], []
+    columns = [
+        str(column.get("name", f"column_{index + 1}"))
+        for index, column in enumerate(result_set["row_type"])
+    ]
+    rows = [
+        {column: value for column, value in zip(columns, row)}
+        for row in result_set["data"]
+        if isinstance(row, (list, tuple))
+    ]
+    return columns, rows
+
+
 def run_snowflake_cortex(question: str) -> dict[str, Any]:
     """Invoke a configured Snowflake Cortex Agent object through its REST run API."""
     cfg = provider_configuration()["snowflake_cortex"]
@@ -233,12 +276,14 @@ def run_snowflake_cortex(question: str) -> dict[str, Any]:
     content = body.get("content", [])
     text_parts = _collect_snowflake_text(content)
     answer = "\n".join(part for part in text_parts if part.strip())
+    columns, rows = _normalise_snowflake_rows(content)
     return {
         "provider": "Snowflake Cortex Agent",
         "status": body.get("status", "completed"),
         "answer": answer or "Cortex Agent returned a structured response without a plain-text block.",
         "sql": _find_sql(body),
-        "rows": [],
+        "columns": columns,
+        "rows": rows,
         "conversation_id": str((body.get("metadata") or {}).get("thread_id", "")),
         "warnings": body.get("warnings", []),
         "note": (
