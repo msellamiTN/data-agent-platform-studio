@@ -37,8 +37,10 @@ def run_csv_pipeline(
     trim_text: bool = True,
     drop_duplicates: bool = True,
     drop_empty_rows: bool = True,
+    business_context: str = "",
 ) -> dict[str, Any]:
     """Run one shared Bronze → Silver → Gold pipeline for both agent scenarios."""
+
     source = _workspace_file(csv_path)
     frame = pd.read_csv(source)
     if frame.empty:
@@ -66,6 +68,43 @@ def run_csv_pipeline(
 
     if frame.empty:
         raise ValueError("All rows were removed by the selected cleaning rules.")
+
+    # Lightweight metadata is the shared context contract for the analysis agent.
+    column_profile: dict[str, Any] = {}
+    dimensions: list[str] = []
+    measures: list[str] = []
+    date_columns: list[str] = []
+    for column in frame.columns:
+        series = frame[column]
+        dtype_name = str(series.dtype)
+        non_null = series.dropna()
+        samples = []
+        for value in non_null.head(5).tolist():
+            if hasattr(value, "isoformat"):
+                value = value.isoformat()
+            elif hasattr(value, "item"):
+                value = value.item()
+            samples.append(value if isinstance(value, (str, int, float, bool)) else str(value))
+        column_profile[str(column)] = {
+            "dtype": dtype_name,
+            "null_count": int(series.isna().sum()),
+            "distinct_count": int(series.nunique(dropna=True)),
+            "sample_values": samples,
+        }
+        name = str(column).casefold()
+        if pd.api.types.is_numeric_dtype(series):
+            measures.append(str(column))
+        elif any(token in name for token in ("date", "time", "timestamp", "jour")):
+            date_columns.append(str(column))
+        else:
+            dimensions.append(str(column))
+
+    semantic_catalog = {
+        "dimensions": dimensions,
+        "measures": measures,
+        "date_columns": date_columns,
+        "business_context": business_context.strip(),
+    }
 
     # The single active pipeline is the shared hand-off contract to every agent.
     pipeline_id = uuid.uuid4().hex[:12]
@@ -101,6 +140,9 @@ def run_csv_pipeline(
         "nulls_before": nulls_before,
         "nulls_after": {str(k): int(v) for k, v in frame.isna().sum().items()},
         "columns": [str(column) for column in frame.columns],
+        "column_profile": column_profile,
+        "semantic_catalog": semantic_catalog,
+        "business_context": business_context.strip(),
         "layers": {
             "bronze": str(bronze_file),
             "silver": str(silver_file),
