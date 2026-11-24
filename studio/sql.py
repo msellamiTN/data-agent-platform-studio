@@ -119,9 +119,18 @@ def fallback_pipeline_sql(question: str) -> str:
         return '"' + name.replace('"', '""') + '"'
 
     if group and metric and any(word in lowered for word in ("revenue", "sales", "chiffre", "ca", "total", "par region", "by region")):
+        date_column = next(
+            (columns[key] for key in ("order_date", "date", "transaction_date") if key in columns),
+            None,
+        )
+        date_filter = ""
+        if date_column and any(word in lowered for word in ("first quarter", "quarter", "trimestre", "t1")):
+            date_filter = (
+                f" WHERE CAST(strftime('%m', {quote(date_column)}) AS INTEGER) BETWEEN 1 AND 3"
+            )
         return (
             f"SELECT {quote(group)} AS dimension, SUM(CAST({quote(metric)} AS REAL)) AS metric_total "
-            f"FROM silver_data GROUP BY {quote(group)} "
+            f"FROM silver_data{date_filter} GROUP BY {quote(group)} "
             "ORDER BY metric_total DESC LIMIT 100"
         )
     return "SELECT * FROM silver_data LIMIT 25"
