@@ -37,7 +37,7 @@ def _check_sql(sql: str) -> str:
     if ";" in statement.rstrip(";"):
         raise ValueError("Only one SQL statement is allowed.")
     statement = statement.rstrip(";").strip()
-    if not re.match(r"^(SELECT|WITH)\\b", statement, flags=re.IGNORECASE):
+    if not re.match(r"^(SELECT|WITH)\b", statement, flags=re.IGNORECASE):
         raise ValueError("Only SELECT or WITH ... SELECT queries are allowed.")
     return statement
 
