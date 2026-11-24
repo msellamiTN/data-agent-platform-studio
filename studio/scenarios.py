@@ -30,8 +30,10 @@ def run_data_engineering(
     trim_text: bool = True,
     drop_duplicates: bool = True,
     drop_empty_rows: bool = True,
+    business_context: str = "",
 ) -> dict[str, Any]:
     """CrewAI Data Engineering Agent creates and publishes the shared pipeline."""
+
     run_dir = WORKSPACE_DIR / f"uploads_{uuid.uuid4().hex[:10]}"
     workspace_csv = copy_upload_to_workspace(upload_path, run_dir)
     captured: dict[str, Any] = {}
@@ -44,6 +46,7 @@ def run_data_engineering(
             trim_text=trim_text,
             drop_duplicates=drop_duplicates,
             drop_empty_rows=drop_empty_rows,
+            business_context=business_context,
         )
         captured["report"] = report
         return json.dumps(report, ensure_ascii=False, default=str)
@@ -71,9 +74,10 @@ def run_data_engineering(
         task = Task(
             description=(
                 "Call run_shared_data_pipeline exactly once. Summarize the source, "
-                "row counts, duplicate removals, quality report and active Gold table. "
-                "State that the pipeline manifest is shared with the Data Analysis "
-                "Agent. Do not claim that data was published to an external platform."
+                "row counts, duplicate removals, quality report, semantic catalog and "
+                "active Gold table. State that the pipeline manifest is shared with "
+                "the Data Analysis Agent. Do not claim that data was published externally. "
+                f"Business context supplied by the user: {business_context.strip() or 'not supplied'}."
             ),
             expected_output=(
                 "A concise report based only on the pipeline tool output, including "
@@ -98,6 +102,7 @@ def run_data_engineering(
             trim_text=trim_text,
             drop_duplicates=drop_duplicates,
             drop_empty_rows=drop_empty_rows,
+            business_context=business_context,
         )
         execution_mode = "python_fallback"
 
@@ -168,6 +173,8 @@ def run_data_analysis(question: str) -> dict[str, Any]:
             description=(
                 f"Active pipeline ID: {manifest['pipeline_id']}. "
                 f"Dataset: {manifest['dataset']}. Gold table: silver_data.\n"
+                f"Business context: {manifest.get('business_context') or 'not supplied'}.\n"
+                f"Semantic catalog: {json.dumps(manifest.get('semantic_catalog', {}), ensure_ascii=False)}.\n"
                 f"Business question: {question.strip()}\n\n"
                 "Mandatory sequence: (1) call inspect_active_pipeline; "
                 "(2) use only the returned columns; (3) write one SELECT query "
