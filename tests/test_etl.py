@@ -12,6 +12,10 @@ def test_csv_pipeline_trims_deduplicates_and_loads_shared_layers(tmp_path, monke
     monkeypatch.setattr(etl_module, "WORKSPACE_DIR", tmp_path)
     monkeypatch.setattr(etl_module, "CURRENT_PIPELINE_DIR", pipeline_dir)
     monkeypatch.setattr(etl_module, "PIPELINE_MANIFEST", manifest_path)
+    import studio.sql as sql_module
+    monkeypatch.setattr(sql_module, "WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(sql_module, "CURRENT_PIPELINE_DIR", pipeline_dir)
+    monkeypatch.setattr(sql_module, "PIPELINE_MANIFEST", manifest_path)
 
     source = tmp_path / "input.csv"
     pd.DataFrame(
@@ -48,6 +52,17 @@ def test_csv_pipeline_trims_deduplicates_and_loads_shared_layers(tmp_path, monke
         staging_count = connection.execute("SELECT COUNT(*) FROM staging_upload").fetchone()[0]
     assert silver_count == 2
     assert staging_count == 2
+
+    # The analysis-side contract resolves the very same manifest and Gold table.
+    schema = sql_module.describe_pipeline_schema()
+    assert schema["pipeline_id"] == report["pipeline_id"]
+    assert schema["table"] == "silver_data"
+    assert "customer" in schema["columns"]
+    query = sql_module.execute_readonly_query(
+        report["database"],
+        "SELECT customer FROM silver_data ORDER BY customer",
+    )
+    assert query["row_count"] == 2
 
     quality = json.loads(open(report["quality_report"], encoding="utf-8").read())
     assert quality["rows_after"] == 2
