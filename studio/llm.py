@@ -43,7 +43,7 @@ class HuggingFaceLocalLLM(BaseLLM):
         dtype = torch.float16 if torch.cuda.is_available() else torch.float32
         self._hf_model = AutoModelForCausalLM.from_pretrained(
             self.model,
-            torch_dtype=dtype,
+            dtype=dtype,
             device_map="auto",
             low_cpu_mem_usage=True,
         )
