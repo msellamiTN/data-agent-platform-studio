@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import os
 import time
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
@@ -50,9 +50,10 @@ def provider_configuration() -> dict[str, dict[str, Any]]:
     }
 
 
-def _extract_genie_answer(message: dict[str, Any]) -> tuple[str, str]:
+def _extract_genie_answer(message: dict[str, Any]) -> tuple[str, str, str]:
     answers: list[str] = []
     sql = ""
+    attachment_id = ""
     for attachment in message.get("attachments", []) or []:
         text_attachment = attachment.get("text") or {}
         if text_attachment.get("content"):
@@ -60,7 +61,10 @@ def _extract_genie_answer(message: dict[str, Any]) -> tuple[str, str]:
         query_attachment = attachment.get("query") or {}
         if query_attachment.get("query") and not sql:
             sql = str(query_attachment["query"])
-    return "\n\n".join(answers).strip(), sql
+            attachment_id = (
+                str(attachment.get("attachment_id") or query_attachment.get("attachment_id") or "")
+            )
+    return "\n\n".join(answers).strip(), sql, attachment_id
 
 
 def run_databricks_genie(question: str, max_wait_seconds: int = 120) -> dict[str, Any]:
@@ -116,13 +120,41 @@ def run_databricks_genie(question: str, max_wait_seconds: int = 120) -> dict[str
         error = message.get("error") or {}
         raise RuntimeError(f"Databricks Genie ended with {status}: {error}")
 
-    answer, sql = _extract_genie_answer(message)
+    answer, sql, attachment_id = _extract_genie_answer(message)
+    columns: list[str] = []
+    rows: list[dict[str, Any]] = []
+    if attachment_id:
+        result_url = (
+            f"{DATABRICKS_HOST}/api/2.0/genie/spaces/{DATABRICKS_GENIE_SPACE_ID}"
+            f"/conversations/{conversation_id}/messages/{message_id}"
+            f"/attachments/{attachment_id}/query-result"
+        )
+        try:
+            result_response = requests.get(result_url, headers=headers, timeout=45)
+            result_response.raise_for_status()
+            statement = result_response.json().get("statement_response") or {}
+            manifest = statement.get("manifest") or {}
+            columns = [
+                str(column.get("name", ""))
+                for column in ((manifest.get("schema") or {}).get("columns") or [])
+            ]
+            data = ((statement.get("result") or {}).get("data_array") or [])
+            rows = [
+                {column: value for column, value in zip(columns, row)}
+                for row in data
+            ]
+        except requests.RequestException:
+            # The answer and SQL remain useful if the provider query-result attachment
+            # has expired or the workspace returns an external-link disposition.
+            rows = []
+            columns = []
     return {
         "provider": "Databricks Genie",
         "status": status,
         "answer": answer or "Genie completed without a text attachment; inspect the provider conversation.",
         "sql": sql,
-        "rows": [],
+        "rows": rows,
+        "columns": columns,
         "conversation_id": conversation_id,
         "message_id": message_id,
         "note": (
@@ -174,9 +206,12 @@ def run_snowflake_cortex(question: str) -> dict[str, Any]:
     base = SNOWFLAKE_HOST
     if not base.startswith(("https://", "http://")):
         base = "https://" + base
+    database = quote(SNOWFLAKE_DATABASE, safe="")
+    schema = quote(SNOWFLAKE_SCHEMA, safe="")
+    agent_name = quote(SNOWFLAKE_AGENT_NAME, safe="")
     endpoint = (
-        f"{base}/api/v2/databases/{SNOWFLAKE_DATABASE}/schemas/{SNOWFLAKE_SCHEMA}"
-        f"/agents/{SNOWFLAKE_AGENT_NAME}:run"
+        f"{base}/api/v2/databases/{database}/schemas/{schema}"
+        f"/agents/{agent_name}:run"
     )
     headers = {
         "Authorization": f"Bearer {SNOWFLAKE_TOKEN}",
@@ -191,7 +226,6 @@ def run_snowflake_cortex(question: str) -> dict[str, Any]:
             }
         ],
         "stream": False,
-        "background": False,
     }
     response = requests.post(endpoint, headers=headers, json=payload, timeout=900)
     response.raise_for_status()
