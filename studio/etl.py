@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from .config import WORKSPACE_DIR
+from .config import MAX_UPLOAD_BYTES, WORKSPACE_DIR
 
 
 def _workspace_file(path: str | Path) -> Path:
@@ -31,8 +31,8 @@ def run_csv_pipeline(
 ) -> dict[str, Any]:
     """Profile, clean, export, and load a CSV to a local SQLite staging table."""
     source = _workspace_file(csv_path)
-    if source.stat().st_size > 25 * 1024 * 1024:
-        raise ValueError("CSV exceeds the 25 MB lab limit.")
+    if source.stat().st_size > MAX_UPLOAD_BYTES:
+        raise ValueError("CSV exceeds the configured upload size limit.")
 
     frame = pd.read_csv(source)
     rows_before = len(frame)
@@ -88,8 +88,8 @@ def copy_upload_to_workspace(upload_path: str | Path, run_dir: Path) -> Path:
         raise ValueError("Upload file was not found.")
     if source.suffix.lower() != ".csv":
         raise ValueError("Only CSV uploads are supported in this prototype.")
-    if source.stat().st_size > 25 * 1024 * 1024:
-        raise ValueError("Upload exceeds the 25 MB lab limit.")
+    if source.stat().st_size > MAX_UPLOAD_BYTES:
+        raise ValueError("Upload exceeds the configured size limit.")
 
     run_dir.mkdir(parents=True, exist_ok=True)
     destination = (run_dir / "input.csv").resolve()
