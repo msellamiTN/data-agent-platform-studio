@@ -23,4 +23,4 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q app.py studio tests
       - name: Run deterministic tool tests
-        run: pytest -q tests/test_sql_guard.py tests/test_etl.py
+        run: PYTHONPATH=. python -m pytest -q tests/test_sql_guard.py tests/test_etl.py
