@@ -8,8 +8,7 @@ import pandas as pd
 import plotly.express as px
 
 from studio.config import SAMPLE_SALES_CSV
-from studio.integrations import provider_configuration
-from studio.scenarios import LOCAL_PROVIDER, run_data_analysis, run_data_engineering
+from studio.scenarios import run_data_analysis, run_data_engineering
 
 
 CSS = """
@@ -26,7 +25,6 @@ def _engineering_handler(
     drop_duplicates: bool,
     drop_empty_rows: bool,
 ):
-    # One pipeline source feeds BOTH the Data Engineering and Data Analysis experiences.
     upload_path = (
         upload if isinstance(upload, str)
         else getattr(upload, "name", str(upload)) if upload
@@ -58,9 +56,9 @@ def _engineering_handler(
         return error, None, pd.DataFrame(), error, "Pipeline failed."
 
 
-def _analysis_handler(provider: str, question: str):
+def _analysis_handler(question: str):
     try:
-        result = run_data_analysis(question, provider)
+        result = run_data_analysis(question)
         frame = result["dataframe"]
         figure = None
         if not frame.empty:
@@ -77,45 +75,22 @@ def _analysis_handler(provider: str, question: str):
                     frame,
                     x=categorical[0],
                     y=numeric[0],
-                    title=f"Analysis result · {result['provider']}",
+                    title="Data Analysis Agent · Gold dataset",
                     template="plotly_white",
                 )
 
-        note = result.get("provider_note") or ""
         summary = result["summary"]
+        note = result.get("provider_note") or ""
         if note:
             summary += "\n\n**Data context:** " + note
         if result.get("crew_error"):
             summary += "\n\n**CrewAI/model detail:** " + result["crew_error"]
-        if result.get("conversation_id"):
-            summary += "\n\n**Provider conversation:** " + result["conversation_id"]
         summary += "\n\n**Execution mode:** " + result["execution_mode"]
-
         return result.get("sql", ""), frame, figure, summary
     except Exception as exc:
         return "", pd.DataFrame(), None, (
             f"**Analysis failed:** {type(exc).__name__}: {exc}"
         )
-
-
-def _provider_status():
-    status = provider_configuration()
-    rows = []
-    for key, label in (
-        ("independent", "Independent CrewAI + Hugging Face"),
-        ("databricks_genie", "Databricks Genie Agent"),
-        ("snowflake_cortex", "Snowflake Cortex Agent"),
-    ):
-        entry = status[key]
-        if entry["configured"]:
-            rows.append({"provider": label, "status": "Configured", "missing": ""})
-        else:
-            rows.append({
-                "provider": label,
-                "status": "Needs configuration",
-                "missing": ", ".join(entry["missing"]),
-            })
-    return pd.DataFrame(rows)
 
 
 with gr.Blocks(
@@ -127,37 +102,38 @@ with gr.Blocks(
         """
         <div id="studio-header">
         <h1>Data Agent Platform Studio</h1>
-        <p>One shared data pipeline · Multiple AI agent providers · Colab T4 · Gradio</p>
+        <p>One shared data pipeline · Two specialized CrewAI agents · Local Hugging Face model · Colab T4</p>
         </div>
         """
     )
     gr.Markdown(
-        "**One dataset, one lineage, multiple agents.** Data Engineering prepares the shared "
-        "Bronze/Silver/Gold pipeline; Data Analysis agents consume the curated data through "
-        "the selected local or platform-native provider.",
+        "**One dataset, one lineage, two agents.** The Data Engineering Agent prepares "
+        "the shared Bronze/Silver/Gold pipeline. The Data Analysis Agent consumes that "
+        "exact Gold dataset. Both agents run locally through CrewAI and the same "
+        "Hugging Face model on the Colab GPU.",
         elem_classes=["scenario-note"],
     )
 
     with gr.Tabs():
-        with gr.Tab("01 · Shared Data Pipeline"):
-            gr.Markdown("## Data Engineering Agent → shared pipeline")
+        with gr.Tab("01 · Data Engineering Agent"):
+            gr.Markdown("## Prepare and publish the shared data pipeline")
             gr.Markdown(
-                "Upload a CSV or use the Retail Sales example. Both agents work from the same "
-                "active Gold dataset; Data Analysis does not ask for a second, unrelated file."
+                "Upload one CSV or use the built-in Retail Sales example. This run creates "
+                "the active dataset manifest that the Data Analysis Agent will consume."
             )
             with gr.Row():
                 with gr.Column(scale=1):
                     de_file = gr.File(
-                        label="Source CSV (optional — demo sales dataset is used when empty)",
+                        label="Source CSV (optional — use Retail Sales demo when empty)",
                         file_types=[".csv"],
                         type="filepath",
                     )
                     de_trim = gr.Checkbox(value=True, label="Trim text fields")
                     de_duplicates = gr.Checkbox(value=True, label="Remove exact duplicates")
                     de_empty = gr.Checkbox(value=True, label="Remove fully empty rows")
-                    de_run = gr.Button("Run shared pipeline", variant="primary")
+                    de_run = gr.Button("Run Data Engineering Agent", variant="primary")
                 with gr.Column(scale=2):
-                    de_summary = gr.Markdown("Run the pipeline to publish a shared dataset.")
+                    de_summary = gr.Markdown("Run the pipeline to prepare the shared dataset.")
                     de_report = gr.JSON(label="Pipeline quality report and lineage")
             with gr.Row():
                 de_download = gr.File(label="Silver · cleaned CSV")
@@ -170,23 +146,14 @@ with gr.Blocks(
             )
 
         with gr.Tab("02 · Data Analysis Agent"):
-            gr.Markdown("## Analyze the active pipeline")
+            gr.Markdown("## Ask business questions about the active Gold dataset")
             gr.Markdown(
-                "Ask a business question about the dataset prepared in tab 01. "
-                "Choose an independent CrewAI agent or a native data agent that is "
-                "already configured against the corresponding curated platform assets."
+                "This agent does not load a second dataset. It reads the manifest and schema "
+                "published by the Data Engineering Agent, generates a query for the actual "
+                "columns, and executes it through the read-only SQL tool."
             )
             with gr.Row():
                 with gr.Column(scale=1):
-                    da_provider = gr.Dropdown(
-                        choices=[
-                            LOCAL_PROVIDER,
-                            "Databricks Genie",
-                            "Snowflake Cortex",
-                        ],
-                        value=LOCAL_PROVIDER,
-                        label="Analysis agent provider",
-                    )
                     da_question = gr.Textbox(
                         label="Business question",
                         value="What is the revenue by region in the first quarter?",
@@ -195,69 +162,32 @@ with gr.Blocks(
                     gr.Examples(
                         examples=[
                             ["What is the revenue by region in the first quarter?"],
-                            ["Show total revenue by product."],
+                            ["Show total sales by product."],
                             ["Which region has the highest revenue?"],
                             ["Show the 5 rows with the highest revenue."],
+                            ["Summarize the columns and data quality of this dataset."],
                         ],
                         inputs=[da_question],
                     )
                     da_run = gr.Button("Run Data Analysis Agent", variant="primary")
                 with gr.Column(scale=2):
                     da_summary = gr.Markdown("Analysis result will appear here.")
-                    da_sql = gr.Code(label="SQL (when returned by provider)", language="sql")
-            da_table = gr.Dataframe(label="Result table", interactive=False)
+                    da_sql = gr.Code(label="Generated SQL · read only", language="sql")
+            da_table = gr.Dataframe(label="Query result", interactive=False)
             da_plot = gr.Plot(label="Result visualization")
             da_run.click(
                 _analysis_handler,
-                inputs=[da_provider, da_question],
+                inputs=[da_question],
                 outputs=[da_sql, da_table, da_plot, da_summary],
-            )
-
-        with gr.Tab("03 · Agent Providers & Data Platforms"):
-            gr.Markdown("## Provider selection is separate from the data pipeline")
-            gr.Markdown(
-                """
-                | Layer | Databricks | Snowflake | Independent |
-                |---|---|---|---|
-                | Data engineering | Lakeflow Connect / Pipelines / Jobs; Genie Code for engineering assistance | Snowpark / SQL / Tasks / Dynamic Tables | CrewAI + Python / Pandas / Spark |
-                | Data analysis | Genie Agent over Unity Catalog assets | Cortex Agent over configured Analyst / Search / other tools | CrewAI + local Hugging Face model + read-only SQL tools |
-
-                **Important:** Genie and Cortex are native platform agents. They query assets already
-                configured in their respective environments; this Colab demo does not silently copy
-                the uploaded CSV into Unity Catalog or Snowflake. Publish the matching Silver/Gold
-                dataset and configure the provider agent/semantic layer before selecting a native agent.
-                """
-            )
-            provider_table = gr.Dataframe(
-                value=_provider_status(),
-                label="Provider configuration status (credential values are never displayed)",
-                interactive=False,
-            )
-            gr.Button("Refresh provider status").click(
-                _provider_status,
-                inputs=[],
-                outputs=[provider_table],
-            )
-            gr.Markdown(
-                """
-                **Environment variables / Colab Secrets**
-
-                Databricks: DATABRICKS_HOST, DATABRICKS_TOKEN, DATABRICKS_GENIE_SPACE_ID.
-
-                Snowflake: SNOWFLAKE_HOST, SNOWFLAKE_TOKEN, SNOWFLAKE_DATABASE,
-                SNOWFLAKE_SCHEMA, SNOWFLAKE_AGENT_NAME.
-
-                No token is stored in the repository or displayed in this interface.
-                """
             )
 
     gr.Markdown(
         """
         ---
-        **Pipeline contract:** Bronze keeps the uploaded source; Silver stores the cleaned CSV;
-        Gold exposes the shared silver_data table and its manifest. The independent agent reads
-        this exact Gold table with SELECT-only SQLite controls. Native Genie/Cortex agents run
-        against their configured governed platform assets.
+        **Platform capabilities:** shared pipeline manifest, schema awareness, data-quality
+        metadata, source-to-Gold lineage, bounded CrewAI tools, SQL read-only policy,
+        result limits and an execution trace. The platform is vendor-independent; it does
+        not call external Genie, Cortex or hosted-agent APIs.
         """
     )
 
