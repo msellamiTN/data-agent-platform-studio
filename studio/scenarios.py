@@ -202,7 +202,7 @@ def run_data_analysis(question: str) -> dict[str, Any]:
     query_attempted = False
 
     def inspect_active_pipeline() -> str:
-        """Inspect schema and sample rows from the active immutable Gold run."""
+        """Inspect columns and compact profile metadata from the active Gold run."""
         return json.dumps(schema, ensure_ascii=False, default=str)
 
     def query_active_pipeline_read_only(sql: str) -> str:
