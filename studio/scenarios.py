@@ -304,8 +304,17 @@ def run_data_analysis(question: str) -> dict[str, Any]:
             "or an explicit preview."
         )
 
+    result_kind = (
+        "verified_aggregate"
+        if plan and plan["intent"] in {"row_count", "column_count", "distinct_count"}
+        else "preview"
+        if plan and plan["intent"] == "preview" or execution_mode == "safe_preview_fallback"
+        else "query_result"
+    )
+
     return {
         "provider": "Independent CrewAI + Hugging Face",
+        "result_kind": result_kind,
         "summary": verified_summary,
         "agent_summary": crew_summary,
         "sql": payload["sql"],
