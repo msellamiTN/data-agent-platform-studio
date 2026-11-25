@@ -180,6 +180,12 @@ The visual system uses a restrained navy/blue/teal palette, clear typographic hi
 
 See [the UX design specification](docs/UX-DESIGN.md) for the layout and interaction principles.
 
+## Security and production readiness
+
+This is a production-minded prototype baseline, **not a production-ready multi-user service**. It has no user authentication, tenant isolation, application-managed encryption at rest, automated data retention, or operational audit/alerting. Use synthetic or non-sensitive data only. See [SECURITY.md](SECURITY.md) and the [production-readiness release gates](docs/PRODUCTION-READINESS.md) before any deployment beyond a controlled demo.
+
+The current Gradio dependency range constrains Pillow below 13.0.0, while Pillow's 13.0.0 release contains upstream security fixes that are not backported to earlier releases. The Colab notebook currently installs the compatible Pillow 11.3.0 line to avoid the reported import mismatch; this compatibility/security trade-off is explicitly recorded as a production release blocker. Do not treat the dependency set as security-hardened until Gradio's constraint and the Pillow floor are reconciled and the complete environment passes compatibility and vulnerability checks.
+
 ## Tests
 
 ~~~bash
