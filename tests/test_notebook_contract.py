@@ -19,27 +19,27 @@ def _sources(notebook):
     ]
 
 
-def test_colab_notebook_uses_isolated_venv_and_live_launcher():
+def test_colab_notebook_uses_kernel_interpreter_for_bootstrap_and_launch():
     notebook = _notebook(ROOT / "notebooks" / "Colab_T4_Gradio_Studio.ipynb")
     all_source = "\n".join(_sources(notebook))
 
-    assert "git pull --ff-only origin feature/colab-crewai-dual-agent-studio" in all_source
-    assert "scripts/bootstrap_colab.py" in all_source
-    assert ".venv/bin/python scripts/launch_colab.py" in all_source
-    assert "run_runtime_acceptance(get_local_llm())" not in all_source
-    assert "transformers.utils import download_url" not in all_source
+    assert "subprocess.check_call([sys.executable, \"scripts/bootstrap_colab.py\"])" in all_source
+    assert "Path(\".venv/bin/python\").resolve()" in all_source
+    assert "subprocess.check_call([" in all_source
+    assert "scripts/launch_colab.py" in all_source
+    assert "python -m venv" not in all_source
     assert "runtime.restart_runtime()" not in all_source
+    assert "transformers.utils import download_url" not in all_source
     assert "pip install torch" not in all_source.casefold()
 
 
-def test_colab_requirements_do_not_override_global_runtime_packages():
+def test_colab_requirements_keep_torch_out_of_the_studio_dependency_set():
     colab_requirements = (ROOT / "requirements-colab.txt").read_text(encoding="utf-8")
     core_requirements = (ROOT / "requirements-core.txt").read_text(encoding="utf-8")
     full_requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
     hf_compat = (ROOT / "requirements-hf-compat.txt").read_text(encoding="utf-8")
 
     assert colab_requirements.strip() == "-r requirements-core.txt"
-    assert "requirements-colab-runtime.txt" not in colab_requirements
     assert "torch" not in colab_requirements.casefold()
     assert "torch" not in core_requirements.casefold()
     assert "-r requirements-core.txt" in full_requirements
@@ -47,7 +47,6 @@ def test_colab_requirements_do_not_override_global_runtime_packages():
     assert "-r requirements-hf-compat.txt" in core_requirements
     assert "transformers==5.24.1" in hf_compat
     assert "huggingface-hub==1.32.0" in hf_compat
-    assert not (ROOT / "requirements-colab-runtime.txt").exists()
 
 
 def test_colab_launcher_reuses_acceptance_model_for_gradio_app():
@@ -59,15 +58,16 @@ def test_colab_launcher_reuses_acceptance_model_for_gradio_app():
     assert "share=True" in source
 
 
-def test_colab_bootstrap_isolates_studio_and_reuses_base_torch():
+def test_colab_bootstrap_avoids_ensurepip_and_verifies_base_torch_reuse():
     source = (ROOT / "scripts" / "bootstrap_colab.py").read_text(encoding="utf-8")
-    assert '"--system-site-packages"' in source
-    assert '"--no-deps"' in source
+    assert '"venv"' in source
     assert '"--python"' in source
+    assert 'config_text = config.read_text' not in source
+    assert "include-system-site-packages = true" in source
+    assert "ensurepip" not in source
+    assert "venv_sees_torch(torch_file)" in source
+    assert "Path(torch.__file__).resolve()" in source
+    assert '"DATA2AI_COLAB_TORCH_FILE"' in source
     assert '"requirements-colab.txt"' in source
-    assert "from transformers import AutoModelForCausalLM, AutoTokenizer" in source
-    assert 'Path(torch.__file__).resolve()' in source
-    assert 'Path(__import__("os").environ["DATA2AI_COLAB_TORCH_FILE"]).resolve()' in source
-    assert '"model_api_imports": "passed"' in source
     assert "pip check" not in source
-    assert "requirements-colab-runtime.txt" not in source
+    assert "pip install torch" not in source.casefold()
