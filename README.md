@@ -32,7 +32,7 @@ flowchart LR
 5. Run **01 · Data Engineering Agent** first.
 6. Then run **02 · Data Analysis Agent** against the active dataset.
 
-The Colab notebook uses `transformers==5.24.1` with `huggingface-hub==1.32.0`, which satisfies the current Diffusers Hub requirement while keeping the Studio on the supported Transformers 5 API. Its Colab-only compatibility requirements also resolve the observed NumPy/Numba, OpenTelemetry/Google ADK, Rich/BigFrames, fsspec/GCSFS/Datasets, oauthlib/Tweepy and IPython/Jedi conflicts. The notebook runs `pip check`, imports the public Transformers tokenizer/model classes, then performs live runtime acceptance before launching: one direct local inference and one real CrewAI invocation of a registered Python tool. It uses the same cached adapter in that notebook kernel, so the app can reuse the warmed model. Local app startup remains lazy unless you run the acceptance command first. The install requirements retain the documented Pillow 11.3.0 compatibility pin. If the notebook detects that affected packages were already imported, it stops before installation and tells you to select **Runtime → Restart session**, then rerun from the top.
+The Colab notebook creates a project-local `.venv` with `--system-site-packages`, so the Studio can reuse Colab's CUDA-enabled PyTorch without replacing the runtime's Torch wheel. It installs the Studio's dependency graph inside that environment using `uv`; it does not downgrade unrelated Colab packages such as Google ADK, BigFrames, GCSFS, Datasets, Numba or Tweepy. Those packages may have conflicting requirements with each other in the base image, so a global `pip check` is not used as the Studio's acceptance criterion. The isolated environment explicitly imports the Studio's public Transformers tokenizer/model APIs and records package/runtime versions. `scripts/launch_colab.py` then performs one real local model inference and one CrewAI tool invocation, and launches Gradio in the same process using the already-loaded model. The notebook keeps the documented Pillow 11.3.0 compatibility pin; see the runtime dependency note for the security-release blocker.
 
 
 See [Hugging Face runtime compatibility](docs/RUNTIME-DEPENDENCIES.md) for the version rationale and recovery steps.
@@ -175,13 +175,13 @@ To validate the real local model and CrewAI tool loop before opening the UI, run
 ├── data/sales_demo.csv
 ├── docs/ARCHITECTURE.md
 ├── notebooks/Colab_T4_Gradio_Studio.ipynb
+├── scripts/launch_colab.py
 ├── tests/
 │   ├── test_etl.py
 │   ├── test_llm_runtime.py
 │   └── test_sql_guard.py
 ├── requirements-hf-compat.txt
 ├── requirements-core.txt
-├── requirements-colab-runtime.txt
 ├── requirements-colab.txt
 ├── requirements.txt
 └── requirements-dev.txt
