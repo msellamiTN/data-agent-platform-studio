@@ -10,7 +10,7 @@ This document distinguishes implemented prototype controls from capabilities req
 | Pipeline consistency | Immutable run artifacts; atomic active manifest publication | Concurrent-user isolation, run lifecycle, cleanup and recovery |
 | Data quality | Trim, duplicate and empty-row rules; per-column profile | Configurable contracts, schema evolution, rejection/quarantine policy, business validation |
 | Analytical store | Run-scoped SQLite warehouse | Governed storage service, encryption, backup, restore, concurrency and lifecycle controls |
-| Query safety | SELECT/WITH allowlist, table-scope authorizer, read-only URI, time and row bounds | Resource isolation, per-user authorization, audit trails, query policy tests and load testing |
+| Query safety | SELECT/WITH allowlist, active-table requirement, read-only URI, SQLite limits, query time, streaming row, cell and response-byte bounds | Resource isolation, per-user authorization, audit trails, query policy tests and load testing |
 | Agent boundary | Fixed ETL, schema-inspection and SQL tools | Tool-level identity, scoped authorization, policy evaluation, prompt-injection red-team tests |
 | Model runtime | Local Qwen through Transformers, CPU/GPU mode | Model artifact provenance, pinned hashes, licensing review, resource quotas and measured performance |
 | UI | Gradio Blocks, readiness state, execution-mode disclosure | Authenticated deployment, accessibility review, browser matrix and design-system QA |
@@ -24,7 +24,8 @@ This document distinguishes implemented prototype controls from capabilities req
 2. The active manifest changes only after all run artifacts have been written successfully.
 3. An unsuccessful pipeline attempt does not replace the previously active manifest.
 4. Analysis uses the database path from the active manifest and validates that it is inside the pipeline workspace.
-5. SQL execution can read only the canonical `silver_data` table and is time- and row-bounded.
+5. SQL execution can read only the canonical `silver_data` table and is time-, row-, cell- and response-byte-bounded; results are streamed and BLOBs are omitted.
+6. The model input has a configurable token budget; oversized prompts are rejected, not silently truncated.
 6. Supported count intents are matched against actual column names; an unknown count column returns a correction message rather than an unrelated preview.
 7. Numeric aggregate summaries are generated from executed SQL values rather than unverified model prose.
 8. The UI distinguishes an aggregate answer, a raw read-only query result, and a preview-only fallback.
