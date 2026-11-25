@@ -46,3 +46,39 @@ def test_non_readonly_or_multiple_statements_are_rejected(tmp_path, monkeypatch,
 
     with pytest.raises((ValueError, sqlite3.DatabaseError)):
         execute_readonly_query(db_path, statement)
+
+
+def test_fallback_count_question_uses_count_for_requested_column(monkeypatch):
+    import studio.sql as sql_module
+
+    monkeypatch.setattr(
+        sql_module,
+        "describe_pipeline_schema",
+        lambda: {"columns": ["titre", "Prix", "Nom", "prenom"]},
+    )
+    query = sql_module.fallback_pipeline_sql("how many titre?")
+    assert query == 'SELECT COUNT("titre") AS "value_count" FROM silver_data'
+
+
+def test_fallback_distinct_count_question_uses_distinct(monkeypatch):
+    import studio.sql as sql_module
+
+    monkeypatch.setattr(
+        sql_module,
+        "describe_pipeline_schema",
+        lambda: {"columns": ["titre", "Prix", "Nom", "prenom"]},
+    )
+    query = sql_module.fallback_pipeline_sql("how many distinct titre?")
+    assert query == 'SELECT COUNT(DISTINCT "titre") AS "distinct_count" FROM silver_data'
+
+
+def test_fallback_row_count_question_counts_all_rows(monkeypatch):
+    import studio.sql as sql_module
+
+    monkeypatch.setattr(
+        sql_module,
+        "describe_pipeline_schema",
+        lambda: {"columns": ["titre", "Prix", "Nom", "prenom"]},
+    )
+    query = sql_module.fallback_pipeline_sql("how many rows?")
+    assert query == "SELECT COUNT(*) AS row_count FROM silver_data"
