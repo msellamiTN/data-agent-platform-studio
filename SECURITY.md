@@ -29,6 +29,7 @@ These controls reduce specific risks; they do not constitute a formal security c
 - Gradio share URLs are public to anyone who obtains the URL; the application does not provide an access-control layer for a shared URL.
 - Workspace files and SQLite databases are stored locally without application-managed encryption at rest.
 - Run artifacts are retained; automated retention, secure deletion, backup, and recovery policies are not implemented.
+- CSV business sample metadata is compacted, but this is not a substitute for data classification or sensitive-data detection.
 - There is no centralized audit trail, SIEM integration, rate limiting, abuse detection, or operational alerting.
 - There is no formal privacy classification, PII detection/redaction, or customer data governance workflow.
 - Dependency compatibility and security need a maintained lockfile and automated vulnerability review before a production release.
