@@ -24,6 +24,8 @@ def test_colab_notebook_uses_kernel_interpreter_for_bootstrap_and_launch():
     all_source = "\n".join(_sources(notebook))
 
     assert "subprocess.check_call([sys.executable, \"scripts/bootstrap_colab.py\"])" in all_source
+    assert "uv-based, ensurepip-free" in all_source
+    assert "outdated Colab bootstrap script" in all_source
     assert "Path(\".venv/bin/python\").resolve()" in all_source
     assert "subprocess.check_call([" in all_source
     assert "scripts/launch_colab.py" in all_source
