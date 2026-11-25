@@ -122,6 +122,19 @@ def fallback_pipeline_sql(question: str) -> str:
     def quote(name: str) -> str:
         return '"' + name.replace('"', '""') + '"'
 
+    # Count questions must produce an aggregate, never a row preview.
+    count_match = re.search(r"(?:how many|number of|count|combien|nombre de)\\s+(?:distinct\\s+)?([\\wÀ-ÿ]+)", lowered)
+    if count_match:
+        requested_column = columns.get(count_match.group(1).casefold())
+        if requested_column:
+            distinct = any(word in lowered for word in ("distinct", "unique", "different", "uniques", "distincts"))
+            expression = f"COUNT(DISTINCT {quote(requested_column)})" if distinct else f"COUNT({quote(requested_column)})"
+            alias = "distinct_count" if distinct else "value_count"
+            return f"SELECT {expression} AS {quote(alias)} FROM silver_data"
+
+    if any(word in lowered for word in ("how many rows", "row count", "combien de lignes", "nombre de lignes")):
+        return "SELECT COUNT(*) AS row_count FROM silver_data"
+
     if group and metric and any(word in lowered for word in ("revenue", "sales", "chiffre", "ca", "total", "par region", "by region")):
         date_column = next(
             (columns[key] for key in ("order_date", "date", "transaction_date") if key in columns),
