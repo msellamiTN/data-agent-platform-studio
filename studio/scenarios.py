@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from .config import SAMPLE_SALES_CSV, WORKSPACE_DIR
+from .config import (
+    MAX_ANALYSIS_QUESTION_CHARS,
+    SAMPLE_SALES_CSV,
+    WORKSPACE_DIR,
+)
 from .etl import copy_upload_to_workspace, run_csv_pipeline
 from .sql import (
     describe_pipeline_schema,
@@ -181,6 +185,11 @@ def run_data_analysis(question: str) -> dict[str, Any]:
     """Answer from the exact active Gold run with deterministic semantic validation."""
     if not question or not question.strip():
         raise ValueError("Enter a business question before running the agent.")
+    question = question.strip()
+    if len(question) > MAX_ANALYSIS_QUESTION_CHARS:
+        raise ValueError(
+            f"Business question exceeds the {MAX_ANALYSIS_QUESTION_CHARS:,}-character limit."
+        )
 
     manifest = get_current_pipeline()
     database_path = Path(manifest["database"]).resolve()
@@ -248,7 +257,7 @@ def run_data_analysis(question: str) -> dict[str, Any]:
                 f"Column profile: {json.dumps(schema.get('column_profile', {}), ensure_ascii=False)}.\n"
                 f"Semantic catalog: {json.dumps(schema.get('semantic_catalog', {}), ensure_ascii=False)}.\n"
                 f"<user_business_context>{schema.get('business_context') or 'not supplied'}</user_business_context>\n"
-                f"Business question: {question.strip()}\n"
+                f"Business question: {question}\n"
                 f"{query_instruction}\n\n"
                 "Mandatory sequence: call inspect_active_pipeline, then call "
                 "query_active_pipeline_read_only exactly once. Only one SELECT "
