@@ -133,11 +133,12 @@ The UI does not expose shell execution, arbitrary Python execution, database wri
 ## Colab execution
 
 1. Allocate a GPU runtime in Colab (T4 when available).
-2. Install requirements.
-3. Clone the development branch.
-4. Launch Gradio.
-5. Run Data Engineering first.
-6. Run Data Analysis against the active manifest.
+2. Install `requirements-colab.txt` to preserve the runtime-managed PyTorch/CUDA wheel; local full-runtime setup uses `requirements.txt`.
+3. Confirm the runtime PyTorch version and CUDA availability.
+4. Clone the development branch.
+5. Launch Gradio.
+6. Run Data Engineering first.
+7. Run Data Analysis against the active manifest.
 
 A Gradio share URL is public to anyone who obtains it. Use synthetic data in this training prototype.
 
