@@ -56,7 +56,9 @@ Both CrewAI agents use the same local Hugging Face model adapter. CUDA uses FP16
 **Flow:** Source → Bronze → Profile → Clean → Validate → Silver → Gold → Manifest.
 
 The Gradio UX allows the user to:
-- upload a CSV or select the bundled Retail Sales example;
+- upload a CSV (up to 25 MB, 250,000 rows and 250 columns) or select the bundled Retail Sales example;
+- reject empty or duplicate column names before loading;
+- constrain business descriptions and analysis questions to configured character limits;
 - trim text fields;
 - remove exact duplicate records;
 - remove fully empty rows;
@@ -202,7 +204,7 @@ Tests cover immutable run publication, active-manifest switching, failed-run iso
 - This is an educational prototype, not a production multi-tenant service.
 - Anyone who obtains the Gradio share URL may be able to access the demo; use synthetic data only.
 - Colab storage is temporary; download outputs you need to keep.
-- Uploads are limited to 25 MB.
+- Uploads are limited to 25 MB, 250,000 parsed rows and 250 columns. Column names must be non-empty and unique case-insensitively. Business context and analysis questions have configurable character limits.
 - The Data Engineering Agent has a fixed ETL tool; it has no shell or arbitrary Python execution tool.
 - The Data Analysis Agent has schema-inspection and read-only SQL tools; it cannot write to the database.
 - The model proposes and explains; Python performs the data operations and enforces policy.
