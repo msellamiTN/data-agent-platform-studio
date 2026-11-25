@@ -31,7 +31,7 @@ flowchart LR
 ### 1. Data Engineering Agent
 
 User controls:
-- source CSV upload or built-in Retail Sales example;
+- source CSV upload or built-in Retail Sales example, with file-size, row-count and column-count limits;
 - trim text fields;
 - remove exact duplicates;
 - remove fully empty rows;
@@ -85,6 +85,7 @@ The manifest records:
 - row counts and duplicate-removal counts;
 - null counts before and after;
 - per-column data type, null count, distinct count and sample values;
+- UTF-8 header validation, non-empty and unique column-name requirements, and bounded business-context length;
 - candidate dimensions, measures and date columns;
 - optional user-provided business context.
 
