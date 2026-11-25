@@ -1,8 +1,8 @@
 crewai>=1.15.42,<2.0
 gradio>=5.49,<7.0
-Pillow==11.3.0  # Avoid Colab Pillow _Ink import mismatch
-transformers>=4.56.0
-accelerate>=1.2.0
-pandas>=2.2.0
-plotly>=5.24.0
+Pillow==11.3.0  # Temporary compatibility pin; see SECURITY.md for the Pillow 13 blocker.
+transformers>=4.56,<5.0
+accelerate>=1.2,<2.0
+pandas>=2.2,<4.0
+plotly>=5.24,<7.0
 python-dotenv>=1.0,<2.0
