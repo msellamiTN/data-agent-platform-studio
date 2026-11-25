@@ -85,3 +85,12 @@ def test_prompt_token_count_rejects_invalid_limit():
     from studio.runtime import validate_prompt_token_count
     with pytest.raises(ValueError, match="MAX_INPUT_TOKENS"):
         validate_prompt_token_count(1, 0)
+
+
+def test_transformers_v5_model_loader_uses_dtype_argument():
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "studio" / "llm.py").read_text(encoding="utf-8")
+    assert "dtype=torch.float16" in source
+    assert "dtype=torch.float32" in source
+    assert "torch_dtype=" not in source
