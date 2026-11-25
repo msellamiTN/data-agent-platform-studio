@@ -139,10 +139,12 @@ python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\\Scripts\\activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
+cp .env.example .env          # Windows PowerShell: Copy-Item .env.example .env
+# Edit .env for HF_DEVICE, HF_CPU_THREADS and other local settings.
 python app.py
 ~~~
 
-Open `http://localhost:7860`. CPU is selected automatically when CUDA is unavailable. To force CPU, set `HF_DEVICE=cpu`; to require CUDA, set `HF_DEVICE=cuda`; `HF_DEVICE=auto` prefers CUDA and falls back to CPU. On CPU, `HF_CPU_THREADS=4` controls the PyTorch thread count. To create a temporary Gradio share URL from a trusted environment, set `GRADIO_SHARE=true`.
+Open `http://localhost:7860`. The application loads `.env` from the repository root without overriding variables already set by the shell or notebook. CPU is selected automatically when CUDA is unavailable. To force CPU, set `HF_DEVICE=cpu`; to require CUDA, set `HF_DEVICE=cuda`; `HF_DEVICE=auto` prefers CUDA and falls back to CPU. On CPU, `HF_CPU_THREADS=4` controls the PyTorch thread count. To create a temporary Gradio share URL from a trusted environment, set `GRADIO_SHARE=true`.
 
 ## Repository structure
 
