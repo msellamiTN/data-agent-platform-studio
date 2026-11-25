@@ -32,7 +32,7 @@ flowchart LR
 5. Run **01 · Data Engineering Agent** first.
 6. Then run **02 · Data Analysis Agent** against the active dataset.
 
-The notebook checks the actual runtime. CUDA is preferred when available; CPU-only inference uses FP32 and is slower, with higher RAM requirements. Set `HF_DEVICE=cpu` to force CPU or `HF_DEVICE=cuda` to require a GPU. The model is loaded lazily on its first agent execution. The install requirements pin Pillow 11.3.0 to avoid a known `_Ink` import mismatch in some Colab images; if Pillow was already imported before installation, restart the runtime before importing Gradio or CrewAI.
+The notebook installs `requirements-colab.txt`, which reuses the Colab runtime's existing PyTorch/CUDA wheel rather than replacing it. It checks PyTorch is at least 2.5 before launch. Local full-runtime installation uses `requirements.txt`, which includes PyTorch. The notebook checks the actual runtime. CUDA is preferred when available; CPU-only inference uses FP32 and is slower, with higher RAM requirements. Set `HF_DEVICE=cpu` to force CPU or `HF_DEVICE=cuda` to require a GPU. The model is loaded lazily on its first agent execution. The install requirements pin Pillow 11.3.0 to avoid a known `_Ink` import mismatch in some Colab images; if Pillow was already imported before installation, restart the runtime before importing Gradio or CrewAI.
 
 ## Runtime and core stack
 
@@ -167,6 +167,8 @@ Open `http://localhost:7860`. The application loads `.env` from the repository r
 │   ├── test_etl.py
 │   ├── test_llm_runtime.py
 │   └── test_sql_guard.py
+├── requirements-core.txt
+├── requirements-colab.txt
 ├── requirements.txt
 └── requirements-dev.txt
 ~~~
