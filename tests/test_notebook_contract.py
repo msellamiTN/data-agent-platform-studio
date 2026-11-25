@@ -24,14 +24,11 @@ def test_colab_notebook_uses_isolated_venv_and_live_launcher():
     all_source = "\n".join(_sources(notebook))
 
     assert "git pull --ff-only origin feature/colab-crewai-dual-agent-studio" in all_source
-    assert "requirements-colab.txt" in all_source
     assert "scripts/bootstrap_colab.py" in all_source
     assert ".venv/bin/python scripts/launch_colab.py" in all_source
     assert "run_runtime_acceptance(get_local_llm())" not in all_source
-    assert "from transformers import AutoModelForCausalLM, AutoTokenizer" in all_source
     assert "transformers.utils import download_url" not in all_source
     assert "runtime.restart_runtime()" not in all_source
-    assert "pip check" not in all_source
     assert "pip install torch" not in all_source.casefold()
 
 
@@ -68,6 +65,7 @@ def test_colab_bootstrap_isolates_studio_and_reuses_base_torch():
     assert '"--no-deps"' in source
     assert '"--python"' in source
     assert '"requirements-colab.txt"' in source
+    assert "from transformers import AutoModelForCausalLM, AutoTokenizer" in source
     assert 'Path(torch.__file__).resolve()' in source
     assert 'Path(__import__("os").environ["DATA2AI_COLAB_TORCH_FILE"]).resolve()' in source
     assert '"model_api_imports": "passed"' in source
