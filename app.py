@@ -9,7 +9,7 @@ import gradio as gr
 import pandas as pd
 import plotly.express as px
 
-from studio.config import SAMPLE_SALES_CSV
+from studio.config import MODEL_ID, SAMPLE_SALES_CSV
 from studio.scenarios import run_data_analysis, run_data_engineering
 from studio.sql import get_current_pipeline
 
@@ -167,6 +167,36 @@ textarea, input, .file-preview, .wrap[data-testid="block-info"] {
 }
 .helper-note { color:#8290a0; font-size:10px; line-height:1.55; }
 #studio-footer { color:#8a97a7; font-size:10px; padding:7px 2px; border-top:1px solid #e6ebf1; }
+.panel-title {
+  color:var(--studio-ink); font-size:13px; font-weight:780; letter-spacing:-.2px;
+  margin:0 0 13px; padding:0 0 10px; border-bottom:1px solid var(--studio-line);
+}
+.gradio-container .gradio-group,
+.gradio-container .form,
+.gradio-container .block.gradio-group {
+  background:#fff !important; border:1px solid var(--studio-line) !important;
+  border-radius:14px !important; box-shadow:0 2px 10px rgba(17,36,58,.025) !important;
+  padding:15px !important; gap:12px !important;
+}
+.gradio-container .prose { color:var(--studio-ink) !important; }
+.gradio-container .prose h1, .gradio-container .prose h2,
+.gradio-container .prose h3, .gradio-container .prose h4 {
+  background:transparent !important; border:0 !important; color:var(--studio-ink) !important;
+  box-shadow:none !important; padding:0 !important; margin:0 0 12px !important;
+  font-size:14px !important; font-weight:780 !important;
+}
+.gradio-container [data-testid="dataframe"] {
+  border:1px solid var(--studio-line) !important; border-radius:10px !important;
+  overflow:hidden !important;
+}
+.gradio-container [data-testid="accordion"] {
+  border:1px solid var(--studio-line) !important; border-radius:11px !important;
+  background:#fff !important; margin-bottom:9px !important;
+}
+.gradio-container button, .gradio-container input, .gradio-container textarea,
+.gradio-container select { font-size:13px !important; }
+.gradio-container .wrap .label-wrap { margin-bottom:6px !important; }
+.gradio-container .secondary { background:#f8fafc !important; }
 @media (max-width: 850px) {
   .gradio-container { padding:12px !important; }
   #studio-topbar { align-items:flex-start; flex-direction:column; }
@@ -282,11 +312,10 @@ def _suggested_questions(columns: list[str]) -> list[str]:
     first = str(columns[0])
     ideas = [
         "How many rows are in this dataset?",
-        f"How many {first} values are there?",
-        f"How many distinct {first} values are there?",
+        f'How many non-empty values are in "{first}"?',
+        f'How many distinct values are in "{first}"?',
+        "Preview the first 10 rows.",
     ]
-    if len(columns) > 1:
-        ideas.append(f"Show a preview of {', '.join(str(c) for c in columns[:4])}.")
     return ideas
 
 
@@ -315,10 +344,16 @@ def _engineering_handler(
         rows_after = int(report.get("rows_after", 0))
         removed = int(report.get("duplicates_removed", 0))
         is_fallback = result["execution_mode"] != "crewai_tool"
-        mode = "Python fallback" if is_fallback else "CrewAI tool"
-        status_class = "warning" if is_fallback else ""
-        status_label = "ETL ready · agent fallback" if is_fallback else "CrewAI tool executed"
-        heading = "Pipeline ready · deterministic execution" if is_fallback else "Pipeline executed by CrewAI"
+        orchestration = result.get("orchestration_status", "not_completed")
+        mode = "Deterministic Python ETL" if is_fallback else "CrewAI invoked fixed ETL tool"
+        status_class = "warning" if is_fallback or orchestration != "completed" else ""
+        status_label = "Python fallback used" if is_fallback else "CrewAI tool invoked"
+        heading = "Pipeline artifacts published locally"
+        orchestration_label = (
+            "Completed" if orchestration == "completed" else
+            "Tool invoked; agent did not complete" if orchestration == "failed_after_tool" else
+            "Not completed"
+        )
         summary = f"""
 <div class="content-card">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
@@ -329,9 +364,9 @@ def _engineering_handler(
     <div class="kpi-card"><div class="kpi-label">Source rows</div><div class="kpi-value">{rows_before:,}</div></div>
     <div class="kpi-card"><div class="kpi-label">Silver rows</div><div class="kpi-value">{rows_after:,}</div></div>
     <div class="kpi-card"><div class="kpi-label">Duplicates removed</div><div class="kpi-value">{removed:,}</div></div>
-    <div class="kpi-card"><div class="kpi-label">Agent execution</div><div class="kpi-value" style="font-size:15px">{_escape(mode)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">ETL executor</div><div class="kpi-value" style="font-size:15px">{_escape("Python")}</div></div>
   </div>
-  <div class="helper-note">Pipeline ID: <b>{_escape(report.get("pipeline_id"))}</b> · Gold table: <b>silver_data</b></div>
+  <div class="helper-note">Pipeline ID: <b>{_escape(report.get("pipeline_id"))}</b> · Gold table: <b>silver_data</b> · CrewAI orchestration: <b>{_escape(orchestration_label)}</b></div>
 </div>
 """
         if result.get("crew_error"):
@@ -372,7 +407,7 @@ def _analysis_handler(question: str):
         result = run_data_analysis(question)
         frame = result["dataframe"]
         figure = None
-        if not frame.empty:
+        if not frame.empty and result.get("execution_mode") not in {"safe_preview_fallback", "validated_query_plan"} and len(frame.index) > 1:
             numeric = [
                 column for column in frame.columns
                 if pd.api.types.is_numeric_dtype(frame[column])
@@ -400,9 +435,17 @@ def _analysis_handler(question: str):
         note = result.get("provider_note") or ""
         mode = result.get("execution_mode", "unknown")
         is_fallback = mode != "crewai_tool"
-        status_class = "warning" if is_fallback else ""
-        status_label = "Python safe fallback" if is_fallback else "CrewAI tool executed"
-        heading = "Fallback result · inspect execution status" if is_fallback else "Answer from your Gold dataset"
+        status_labels = {
+            "crewai_tool": ("CrewAI read-only tool executed", ""),
+            "validated_query_plan": ("Deterministic query plan verified", ""),
+            "safe_preview_fallback": ("Safe preview only", "warning"),
+        }
+        status_label, status_class = status_labels.get(mode, ("Execution status unknown", "warning"))
+        heading = (
+            "Verified answer from your Gold dataset"
+            if mode in {"crewai_tool", "validated_query_plan"}
+            else "Preview only · no verified answer"
+        )
         summary = f"""
 <div class="content-card">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
@@ -410,7 +453,7 @@ def _analysis_handler(question: str):
     <span class="status-pill {status_class}"><span class="dot"></span>{status_label}</span>
   </div>
   <div style="color:#34465c;font-size:13px;line-height:1.7;margin-top:12px">{_escape(answer)}</div>
-  <div class="helper-note" style="margin-top:12px">{_escape(note)}</div>
+  <div class="helper-note" style="margin-top:12px">{_escape(note)} · Execution: {_escape(mode)}</div>
 </div>
 """
         if result.get("crew_error"):
@@ -448,7 +491,7 @@ with gr.Blocks(
                 <div><div class="brand-name">Data Agent Studio</div><div class="brand-sub">Independent data intelligence workspace</div></div>
               </div>
               <div class="topbar-right">
-                <span class="top-chip"><span class="dot"></span>Local model · Qwen 1.5B</span>
+                <span class="top-chip"><span class="dot"></span>Local model · {_escape(MODEL_ID.rsplit("/", 1)[-1])}</span>
                 <span class="top-chip">{runtime_label}</span>
                 <span class="top-chip">CrewAI orchestration</span>
               </div>
@@ -523,8 +566,8 @@ with gr.Blocks(
                 )
                 with gr.Row(equal_height=False):
                     with gr.Column(scale=5, min_width=330):
-                        with gr.Group():
-                            gr.Markdown("### 1. Source and business context")
+                        with gr.Group(elem_id="engineering-source-panel"):
+                            gr.HTML('<div class="panel-title">01 · Source and business context</div>')
                             de_file = gr.File(
                                 label="Upload a CSV source",
                                 file_types=[".csv"],
@@ -536,15 +579,15 @@ with gr.Blocks(
                                 placeholder="Example: Retail sales by product, region and order date. Revenue is net sales in TND.",
                                 lines=3,
                             )
-                        with gr.Group():
-                            gr.Markdown("### 2. Data quality rules")
+                        with gr.Group(elem_id="engineering-rules-panel"):
+                            gr.HTML('<div class="panel-title">02 · Data quality rules</div>')
                             de_trim = gr.Checkbox(value=True, label="Trim whitespace in text fields")
                             de_duplicates = gr.Checkbox(value=True, label="Remove exact duplicate rows")
                             de_empty = gr.Checkbox(value=True, label="Remove fully empty rows")
                             gr.Markdown('<div class="helper-note">These rules are deterministic Python operations. The agent orchestrates the pipeline and summarizes the verified output.</div>')
                         de_run = gr.Button("Run data pipeline", variant="primary", size="lg")
                     with gr.Column(scale=7, min_width=360):
-                        gr.Markdown("### Pipeline execution")
+                        gr.HTML('<div class="panel-title">Pipeline execution</div>')
                         de_summary = gr.HTML(value='<div class="empty-state">Your execution summary will appear here after the pipeline runs.</div>')
                         with gr.Accordion("Quality report and column profile", open=False):
                             de_report = gr.JSON(label="Pipeline report")
@@ -566,11 +609,11 @@ with gr.Blocks(
                 )
                 with gr.Row(equal_height=False):
                     with gr.Column(scale=5, min_width=330):
-                        with gr.Group():
-                            gr.Markdown("### Ask a business question")
+                        with gr.Group(elem_id="analysis-question-panel"):
+                            gr.HTML('<div class="panel-title">Ask a business question</div>')
                             da_question = gr.Textbox(
                                 label="Your question",
-                                placeholder="e.g. Which region generated the highest revenue?",
+                                placeholder="e.g. How many rows are in this dataset?",
                                 lines=4,
                             )
                             da_question_ideas = gr.Dropdown(
@@ -600,7 +643,7 @@ with gr.Blocks(
                             """
                         )
                     with gr.Column(scale=7, min_width=360):
-                        gr.Markdown("### Agent response")
+                        gr.HTML('<div class="panel-title">Agent response</div>')
                         da_summary = gr.HTML(value='<div class="empty-state">Your answer, query and result visualization will appear here.</div>')
                         with gr.Accordion("SQL generated by the agent", open=False):
                             da_sql = gr.Code(label="Read-only SQL", language="sql")
