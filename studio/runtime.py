@@ -49,3 +49,17 @@ def positive_float_setting(value: str | None, name: str, default: float) -> floa
     if not math.isfinite(parsed) or parsed <= 0:
         raise ValueError(f"{name} must be a positive finite number.")
     return parsed
+
+
+
+def validate_prompt_token_count(token_count: int, maximum: int) -> None:
+    """Reject an oversized model prompt rather than silently truncating policy."""
+    if maximum < 1:
+        raise ValueError("MAX_INPUT_TOKENS must be a positive integer.")
+    if token_count < 0:
+        raise ValueError("Prompt token count cannot be negative.")
+    if token_count > maximum:
+        raise ValueError(
+            f"Agent prompt contains {token_count:,} tokens; the configured limit is "
+            f"{maximum:,}. Reduce the column count or business context and retry."
+        )
