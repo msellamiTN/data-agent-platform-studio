@@ -99,7 +99,7 @@ This manifest is the shared contract between the two agents. Both scenarios run 
 - **Runtime target:** Google Colab GPU, T4 when available.
 - **UI:** Gradio Blocks with two separate scenario tabs.
 
-The model adapter implements CrewAI's local LLM interface. It does not call a hosted model API. The same model instance is cached and shared by the two agents in a Colab process.
+The model adapter enforces a configurable input-token budget and fails explicitly when a prompt is too large rather than truncating system/tool policies. The model adapter implements CrewAI's local LLM interface. It does not call a hosted model API. The same model instance is cached and shared by the two agents in a Colab process.
 
 ## Core capabilities
 
@@ -125,7 +125,10 @@ The independent Data Analysis tool:
 - opens the SQLite database using read-only URI mode;
 - applies a SQLite authorizer that permits reads only from `silver_data` and blocks writes, schema reads, attachment and unsafe functions;
 - interrupts a query after a configurable five-second execution budget;
-- caps returned rows at 100;
+- caps returned rows at 100, per-cell text length and total serialized response bytes;
+- streams rows one at a time and limits SQLite row/value size before materialization;
+- normalizes BLOBs and non-finite values into JSON-safe output;
+- requires analytical queries to read the canonical dataset table;
 - verifies that the resolved database path is inside the pipeline workspace.
 
 The UI does not expose shell execution, arbitrary Python execution, database writes or credentials to the agents.
