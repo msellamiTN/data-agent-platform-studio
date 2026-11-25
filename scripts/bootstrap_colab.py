@@ -46,6 +46,40 @@ def venv_sees_torch(torch_file):
     )
 
 
+def ensure_base_site_packages_visible(torch_file):
+    """Expose the notebook kernel's package directories to this venv.
+
+    Most Colab images expose them through pyvenv.cfg. The explicit .pth fallback
+    also handles kernels whose Torch package is loaded from an additional
+    site-packages/dist-packages directory.
+    """
+    probe = subprocess.run(
+        [
+            str(VPY),
+            "-c",
+            "import sysconfig; print(sysconfig.get_path('purelib'))",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    venv_site = Path(probe.stdout.strip())
+    venv_site.mkdir(parents=True, exist_ok=True)
+
+    base_sites = {
+        str(Path(entry).resolve())
+        for entry in sys.path
+        if entry
+        and ("site-packages" in entry or "dist-packages" in entry)
+        and Path(entry).is_dir()
+    }
+    # Torch is the anchor package; always include the directory containing it.
+    base_sites.add(str(torch_file.parent.parent.resolve()))
+    pth = venv_site / "data2ai-colab-base-site-packages.pth"
+    pth.write_text("\\n".join(sorted(base_sites)) + "\\n", encoding="utf-8")
+
+
 def create_venv(uv, torch_file):
     cfg = VENV / "pyvenv.cfg"
     configured = (
@@ -71,6 +105,9 @@ def create_venv(uv, torch_file):
     elif "include-system-site-packages" not in text:
         text += "\ninclude-system-site-packages = true\n"
     cfg.write_text(text, encoding="utf-8")
+
+    if not venv_sees_torch(torch_file):
+        ensure_base_site_packages_visible(torch_file)
 
     if not venv_sees_torch(torch_file):
         probe = subprocess.run(
