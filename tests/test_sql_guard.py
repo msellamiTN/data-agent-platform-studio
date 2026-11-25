@@ -61,7 +61,7 @@ def test_query_execution_budget_interrupts_expensive_recursive_cte(tmp_path, mon
     monkeypatch.setattr(sql_module, "MAX_SQL_EXECUTION_SECONDS", 0.05)
     expensive = (
         "WITH RECURSIVE counter(value) AS ("
-        "SELECT 1 UNION ALL SELECT value + 1 FROM counter WHERE value < 100000000"
+        "SELECT COUNT(*) FROM silver_data UNION ALL SELECT value + 1 FROM counter WHERE value < 100000000"
         ") SELECT MAX(value) AS max_value FROM counter"
     )
     with pytest.raises(TimeoutError, match="execution budget"):
