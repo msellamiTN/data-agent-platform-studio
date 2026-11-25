@@ -8,7 +8,6 @@ from typing import Any
 import pandas as pd
 from .config import SAMPLE_SALES_CSV, WORKSPACE_DIR
 from .etl import copy_upload_to_workspace, run_csv_pipeline
-from .llm import get_local_llm
 from .sql import (
     describe_pipeline_schema,
     execute_readonly_query,
