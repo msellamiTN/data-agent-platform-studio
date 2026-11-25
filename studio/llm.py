@@ -1,0 +1,158 @@
+from __future__ import annotations
+
+import os
+from functools import lru_cache
+from typing import Any
+
+import torch
+from pydantic import PrivateAttr
+from crewai import BaseLLM
+
+from .config import MAX_INPUT_TOKENS, MAX_NEW_TOKENS, MODEL_ID
+from .runtime import (
+    resolve_cpu_threads,
+    resolve_runtime_device,
+    validate_prompt_token_count,
+)
+
+
+class HuggingFaceLocalLLM(BaseLLM):
+    """Shared local Transformers model for CrewAI, running on CPU or CUDA.
+
+    CPU uses FP32 for broad compatibility. CUDA uses FP16. This adapter
+    intentionally disables native function calling; CrewAI uses its text tool loop.
+    """
+
+    _tokenizer: Any = PrivateAttr(default=None)
+    _hf_model: Any = PrivateAttr(default=None)
+    _max_new_tokens: int = PrivateAttr(default=MAX_NEW_TOKENS)
+    _device: str = PrivateAttr(default="cpu")
+
+    def __init__(
+        self,
+        model_id: str = MODEL_ID,
+        temperature: float = 0.0,
+        max_new_tokens: int = MAX_NEW_TOKENS,
+        max_input_tokens: int = MAX_INPUT_TOKENS,
+        device: str | None = None,
+    ) -> None:
+        super().__init__(model=model_id, temperature=temperature)
+        self._max_new_tokens = max_new_tokens
+        self._max_input_tokens = max_input_tokens
+        self._device = resolve_runtime_device(
+            device or os.getenv("HF_DEVICE", "auto"),
+            torch.cuda.is_available(),
+        )
+
+    @property
+    def runtime_device(self) -> str:
+        return self._device
+
+    def _ensure_loaded(self) -> None:
+        if self._hf_model is not None:
+            return
+
+        if self._device == "cpu":
+            # Configure CPU parallelism before model loading and first inference.
+            cpu_threads = resolve_cpu_threads(
+                os.getenv("HF_CPU_THREADS"), available=os.cpu_count()
+            )
+            torch.set_num_threads(cpu_threads)
+
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        self._tokenizer = AutoTokenizer.from_pretrained(self.model, use_fast=True)
+        if self._device == "cuda":
+            self._hf_model = AutoModelForCausalLM.from_pretrained(
+                self.model,
+                dtype=torch.float16,
+                device_map="auto",
+            )
+        else:
+            # CPU path deliberately avoids device_map="auto" and half precision.
+            self._hf_model = AutoModelForCausalLM.from_pretrained(
+                self.model,
+                dtype=torch.float32,
+            )
+            self._hf_model.to("cpu")
+
+        if self._tokenizer.pad_token_id is None:
+            self._tokenizer.pad_token = self._tokenizer.eos_token
+
+    @staticmethod
+    def _normalise_messages(messages: Any) -> list[dict[str, str]]:
+        if isinstance(messages, str):
+            return [{"role": "user", "content": messages}]
+        normalised: list[dict[str, str]] = []
+        for item in messages or []:
+            if isinstance(item, dict):
+                role, content = str(item.get("role", "user")), item.get("content", "")
+            else:
+                role = str(getattr(item, "role", "user"))
+                content = getattr(item, "content", str(item))
+            if isinstance(content, list):
+                parts = [
+                    str(part.get("text", "")) if isinstance(part, dict) else str(part)
+                    for part in content
+                ]
+                content = "\n".join(part for part in parts if part)
+            text = str(content).strip()
+            if text:
+                normalised.append({"role": role, "content": text})
+        return normalised or [{"role": "user", "content": "Continue."}]
+
+    def call(
+        self,
+        messages: Any,
+        tools: Any = None,
+        callbacks: Any = None,
+        available_functions: Any = None,
+        from_task: Any = None,
+        from_agent: Any = None,
+        response_model: Any = None,
+        stop: list[str] | None = None,
+        **kwargs: Any,
+    ) -> str:
+        del tools, callbacks, available_functions, from_task, from_agent, response_model, kwargs
+        self._ensure_loaded()
+        chat = self._normalise_messages(messages)
+        try:
+            prompt = self._tokenizer.apply_chat_template(
+                chat, tokenize=False, add_generation_prompt=True
+            )
+        except Exception:
+            prompt = "\n".join(
+                f"{item['role'].upper()}: {item['content']}" for item in chat
+            ) + "\nASSISTANT:"
+
+        encoded = self._tokenizer(prompt, return_tensors="pt", truncation=False)
+        prompt_tokens = int(encoded["input_ids"].shape[1])
+        validate_prompt_token_count(prompt_tokens, self._max_input_tokens)
+        model_device = next(self._hf_model.parameters()).device
+        encoded = {key: value.to(model_device) for key, value in encoded.items()}
+        with torch.inference_mode():
+            generated = self._hf_model.generate(
+                **encoded,
+                max_new_tokens=self._max_new_tokens,
+                do_sample=False,
+                pad_token_id=self._tokenizer.pad_token_id,
+                eos_token_id=self._tokenizer.eos_token_id,
+            )
+        prompt_length = encoded["input_ids"].shape[1]
+        answer = self._tokenizer.decode(
+            generated[0][prompt_length:], skip_special_tokens=True
+        ).strip()
+        if stop:
+            for token in stop:
+                if token and token in answer:
+                    answer = answer.split(token, 1)[0].rstrip()
+        return answer or "Je n'ai pas pu produire de réponse exploitable."
+
+    def supports_function_calling(self) -> bool:
+        return False
+
+
+@lru_cache(maxsize=1)
+def get_local_llm() -> HuggingFaceLocalLLM:
+    """Create one lazy adapter; both agents share its loaded model weights."""
+    return HuggingFaceLocalLLM()
