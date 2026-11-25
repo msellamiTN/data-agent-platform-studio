@@ -32,7 +32,7 @@ flowchart LR
 5. Run **01 · Data Engineering Agent** first.
 6. Then run **02 · Data Analysis Agent** against the active dataset.
 
-The notebook installs `requirements-colab.txt`, which reuses the Colab runtime's existing PyTorch/CUDA wheel rather than replacing it. It checks PyTorch is at least 2.5 before launch. Local full-runtime installation uses `requirements.txt`, which includes PyTorch. The notebook checks the actual runtime. CUDA is preferred when available; CPU-only inference uses FP32 and is slower, with higher RAM requirements. Set `HF_DEVICE=cpu` to force CPU or `HF_DEVICE=cuda` to require a GPU. The model is loaded lazily on its first agent execution. The install requirements pin Pillow 11.3.0 to avoid a known `_Ink` import mismatch in some Colab images; if Pillow was already imported before installation, restart the runtime before importing Gradio or CrewAI.
+The Colab notebook performs live runtime acceptance before launching: one direct local inference and one real CrewAI invocation of a registered Python tool. It uses the same cached adapter in that notebook kernel, so the app can reuse the warmed model. Local app startup remains lazy unless you run the acceptance command first. The install requirements pin Pillow 11.3.0 to avoid a known `_Ink` import mismatch in some Colab images; if Pillow was already imported before installation, restart the runtime before importing Gradio or CrewAI.
 
 ## Runtime and core stack
 
@@ -149,7 +149,9 @@ cp .env.example .env          # Windows PowerShell: Copy-Item .env.example .env
 python app.py
 ~~~
 
-Open `http://localhost:7860`. The application loads `.env` from the repository root without overriding variables already set by the shell or notebook. CPU is selected automatically when CUDA is unavailable. To force CPU, set `HF_DEVICE=cpu`; to require CUDA, set `HF_DEVICE=cuda`; `HF_DEVICE=auto` prefers CUDA and falls back to CPU. On CPU, `HF_CPU_THREADS=4` controls the PyTorch thread count. To create a temporary Gradio share URL from a trusted environment, set `GRADIO_SHARE=true`.
+Open `http://localhost:7860`. The application loads `.env` from the repository root without overriding variables already set by the shell or notebook.
+
+To validate the real local model and CrewAI tool loop before opening the UI, run `python scripts/validate_runtime.py --device auto`. This downloads the model on first use if it is not cached and performs actual generation plus exactly one local tool invocation. Use `--skip-crewai` only when you need to isolate the model-load/inference phase. CPU is selected automatically when CUDA is unavailable. To force CPU, set `HF_DEVICE=cpu`; to require CUDA, set `HF_DEVICE=cuda`; `HF_DEVICE=auto` prefers CUDA and falls back to CPU. On CPU, `HF_CPU_THREADS=4` controls the PyTorch thread count. To create a temporary Gradio share URL from a trusted environment, set `GRADIO_SHARE=true`.
 
 ## Repository structure
 
