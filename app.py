@@ -160,14 +160,17 @@ textarea, input, .file-preview, .wrap[data-testid="block-info"] {
 
 
 def _runtime_label() -> str:
+    requested = os.getenv("HF_DEVICE", "auto").strip().lower()
+    if requested == "cpu":
+        return "CPU · Transformers FP32"
     try:
         import torch
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() and requested != "cpu":
             name = torch.cuda.get_device_name(0)
-            return f"GPU · {name}"
+            return f"GPU · {name} · FP16"
     except Exception:
         pass
-    return "Runtime · CPU"
+    return "CPU · Transformers FP32"
 
 
 def _escape(value: Any) -> str:
@@ -590,12 +593,12 @@ with gr.Blocks(
                       </div>
                     </div>
                     <div class="agent-grid" style="margin-top:14px">
-                      <div class="agent-card"><div class="agent-name">Model boundary</div><div class="agent-description">Qwen2.5-1.5B-Instruct runs through Transformers on the Colab GPU. It plans and explains; Python tools perform bounded data operations.</div></div>
+                      <div class="agent-card"><div class="agent-name">Model boundary</div><div class="agent-description">Qwen2.5-1.5B-Instruct runs locally through Transformers on CUDA (FP16) or CPU (FP32). CPU inference is slower; Python tools perform bounded data operations.</div></div>
                       <div class="agent-card"><div class="agent-name">Data safety</div><div class="agent-description">The analysis tool accepts one SELECT/WITH statement, opens SQLite read-only, applies a SQLite authorizer and caps results at 100 rows.</div></div>
                     </div>
                     <div class="content-card" style="margin-top:14px">
                       <div class="section-kicker">Runtime note</div>
-                      <div class="section-sub">A Colab T4 is the target, but actual GPU allocation depends on Colab availability and quota. Gradio share links are public to anyone who obtains them. Use synthetic data for this lab.</div>
+                      <div class="section-sub">CUDA/T4 is the acceleration target, but GPU allocation depends on runtime availability. CPU-only execution is supported with FP32 and is slower. Gradio share links are public to anyone who obtains them. Use synthetic data for this lab.</div>
                     </div>
                     """
                 )
