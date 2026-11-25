@@ -66,6 +66,8 @@ def test_colab_bootstrap_avoids_ensurepip_and_verifies_base_torch_reuse():
     assert "include-system-site-packages = true" in source
     assert '"-m", "venv"' not in source
     assert "venv_sees_torch(torch_file)" in source
+    assert "data2ai-colab-base-site-packages.pth" in source
+    assert "ensure_base_site_packages_visible(torch_file)" in source
     assert "Path(torch.__file__).resolve()" in source
     assert '"DATA2AI_COLAB_TORCH_FILE"' in source
     assert '"requirements-colab.txt"' in source
