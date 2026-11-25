@@ -236,13 +236,3 @@ def plan_supported_question(question: str, columns: list[str]) -> dict[str, Any]
         }
     return None
 
-
-def fallback_pipeline_sql(question: str) -> str:
-    """Build a supported schema-aware query, or a clearly labeled safe preview."""
-    schema = describe_pipeline_schema()
-    plan = plan_supported_question(question, schema["columns"])
-    if plan and plan.get("error"):
-        raise ValueError(plan["error"])
-    if plan:
-        return plan["sql"]
-    return "SELECT * FROM silver_data LIMIT 25"
