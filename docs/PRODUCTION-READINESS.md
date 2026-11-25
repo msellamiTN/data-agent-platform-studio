@@ -6,7 +6,7 @@ This document distinguishes implemented prototype controls from capabilities req
 
 | Domain | Current state | Production release gate |
 |---|---|---|
-| Data ingestion | CSV allowlist, upload size cap, workspace copy | Content validation, malware scanning where appropriate, quotas, retention and ownership |
+| Data ingestion | CSV allowlist, upload/row/column and prompt size caps, UTF-8 unique headers, workspace copy | Content validation, malware scanning where appropriate, quotas, retention and ownership |
 | Pipeline consistency | Immutable run artifacts; atomic active manifest publication | Concurrent-user isolation, run lifecycle, cleanup and recovery |
 | Data quality | Trim, duplicate and empty-row rules; per-column profile | Configurable contracts, schema evolution, rejection/quarantine policy, business validation |
 | Analytical store | Run-scoped SQLite warehouse | Governed storage service, encryption, backup, restore, concurrency and lifecycle controls |
