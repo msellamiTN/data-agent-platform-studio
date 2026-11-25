@@ -15,7 +15,7 @@ def _sources(notebook_path):
     ]
 
 
-def test_colab_notebook_uses_colab_dependency_profile_and_smoke_checks_imports():
+def test_colab_notebook_uses_compatible_hf_stack_and_preflights_imports():
     notebook_path = ROOT / "notebooks" / "Colab_T4_Gradio_Studio.ipynb"
     sources = _sources(notebook_path)
     all_source = "\n".join(sources)
@@ -29,25 +29,37 @@ def test_colab_notebook_uses_colab_dependency_profile_and_smoke_checks_imports()
     assert "torch.cuda.is_available()" in all_source
     assert "HF_DEVICE" in all_source
     assert "run_runtime_acceptance(get_local_llm())" in all_source
+    assert "from transformers import AutoModelForCausalLM, AutoTokenizer" in all_source
+    assert "transformers.utils import download_url" not in all_source
+    assert "runtime.restart_runtime()" not in all_source
+    assert "Runtime > Restart session" in all_source
     assert "pip install torch" not in all_source.casefold()
-    assert "from transformers.utils import download_url" in all_source
-    assert "runtime.restart_runtime()" in all_source
-    assert "Expected transformers==4.57.6" in all_source
-    assert "Expected huggingface-hub==0.36.2" in all_source
+    assert "Version('2.6.0')" in all_source
 
 
-def test_colab_dependency_profile_does_not_override_torch():
+def test_colab_dependency_profile_preserves_torch_and_repairs_observed_conflicts():
     colab_requirements = (ROOT / "requirements-colab.txt").read_text(encoding="utf-8")
     core_requirements = (ROOT / "requirements-core.txt").read_text(encoding="utf-8")
     full_requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+    hf_compat = (ROOT / "requirements-hf-compat.txt").read_text(encoding="utf-8")
+    colab_runtime = (ROOT / "requirements-colab-runtime.txt").read_text(encoding="utf-8")
 
     assert "-r requirements-core.txt" in colab_requirements
+    assert "-r requirements-colab-runtime.txt" in colab_requirements
     assert "torch" not in colab_requirements.casefold()
     assert "torch" not in core_requirements.casefold()
     assert "-r requirements-core.txt" in full_requirements
-    assert "torch>=" in full_requirements
-    hf_compat = (ROOT / "requirements-hf-compat.txt").read_text(encoding="utf-8")
+    assert "torch>=2.6.0,<3.0" in full_requirements
     assert "-r requirements-hf-compat.txt" in core_requirements
-    assert "transformers==4.57.6" in hf_compat
-    assert "huggingface-hub==0.36.2" in hf_compat
-    assert "transformers>=4.56,<5.0" not in core_requirements
+    assert "transformers==5.24.1" in hf_compat
+    assert "huggingface-hub==1.32.0" in hf_compat
+    for requirement in (
+        "numpy<2.5",
+        "jedi>=0.16",
+        "opentelemetry-api==1.42.1",
+        "opentelemetry-sdk==1.42.1",
+        "rich>=12.4.4,<14",
+        "fsspec==2025.12.0",
+        "oauthlib>=3.2.0,<4",
+    ):
+        assert requirement in colab_runtime
