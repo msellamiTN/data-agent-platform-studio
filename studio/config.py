@@ -28,6 +28,12 @@ MAX_ANALYSIS_QUESTION_CHARS = positive_int_setting(
     os.getenv("MAX_ANALYSIS_QUESTION_CHARS"), "MAX_ANALYSIS_QUESTION_CHARS", 2_000
 )
 MAX_SQL_ROWS = 100
+MAX_SQL_CELL_CHARS = positive_int_setting(
+    os.getenv("MAX_SQL_CELL_CHARS"), "MAX_SQL_CELL_CHARS", 1_024
+)
+MAX_SQL_RESULT_BYTES = positive_int_setting(
+    os.getenv("MAX_SQL_RESULT_BYTES"), "MAX_SQL_RESULT_BYTES", 512 * 1_024
+)
 MAX_SQL_EXECUTION_SECONDS = positive_float_setting(
     os.getenv("MAX_SQL_EXECUTION_SECONDS"),
     "MAX_SQL_EXECUTION_SECONDS",
