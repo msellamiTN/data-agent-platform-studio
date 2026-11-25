@@ -160,3 +160,22 @@ def test_pipeline_rejects_oversized_business_context(tmp_path, monkeypatch):
     monkeypatch.setattr(etl_module, "MAX_BUSINESS_CONTEXT_CHARS", 5)
     with pytest.raises(ValueError, match="5-character limit"):
         etl_module.run_csv_pipeline(source, business_context="too long")
+
+
+
+def test_pipeline_rejects_duplicate_headers_case_insensitively(tmp_path, monkeypatch):
+    workspace, _, _ = _configure_workspace(tmp_path, monkeypatch)
+    workspace.mkdir(parents=True, exist_ok=True)
+    source = workspace / "duplicate_headers.csv"
+    source.write_text("Name,name\nAlice,Bob\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="must be unique"):
+        etl_module.run_csv_pipeline(source)
+
+
+def test_pipeline_rejects_empty_header(tmp_path, monkeypatch):
+    workspace, _, _ = _configure_workspace(tmp_path, monkeypatch)
+    workspace.mkdir(parents=True, exist_ok=True)
+    source = workspace / "empty_header.csv"
+    source.write_text(",name\n,Ali\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="non-empty column names"):
+        etl_module.run_csv_pipeline(source)
