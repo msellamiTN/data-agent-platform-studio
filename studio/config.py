@@ -16,6 +16,7 @@ RUNTIME_DEVICE = os.getenv("HF_DEVICE", "auto").strip().lower()
 CPU_THREADS = max(1, int(os.getenv("HF_CPU_THREADS", str(max(1, os.cpu_count() or 1)))))
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_MB", "25")) * 1024 * 1024
 MAX_SQL_ROWS = 100
+MAX_SQL_EXECUTION_SECONDS = float(os.getenv("MAX_SQL_EXECUTION_SECONDS", "5"))
 
 WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
 PIPELINE_ROOT.mkdir(parents=True, exist_ok=True)
