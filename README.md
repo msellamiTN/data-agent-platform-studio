@@ -1,6 +1,6 @@
 # Data Agent Platform Studio
 
-**Independent data-agent platform · Google Colab T4 · Gradio · CrewAI · Hugging Face**
+**Independent data-agent platform · CUDA / CPU · Gradio · CrewAI · Hugging Face**
 
 A self-contained Studio for two specialized AI agents that operate on **one shared data pipeline**. There are no external hosted-agent connections, vendor agent APIs or remote orchestration dependencies.
 
@@ -25,29 +25,29 @@ flowchart LR
 
 [Open the Colab T4 notebook](https://colab.research.google.com/github/msellamiTN/data-agent-platform-studio/blob/feature/colab-crewai-dual-agent-studio/notebooks/Colab_T4_Gradio_Studio.ipynb)
 
-1. Choose **Runtime → Change runtime type → T4 GPU** when available.
+1. Choose **Runtime → Change runtime type → T4 GPU** when available; a CPU runtime also works.
 2. Run the notebook cells in order.
-3. The notebook checks CUDA, clones this branch, installs dependencies and launches the Gradio Studio.
+3. The notebook detects CUDA; otherwise it selects CPU inference automatically, then clones this branch, installs dependencies and launches the Gradio Studio.
 4. Open the temporary Gradio URL.
 5. Run **01 · Data Engineering Agent** first.
 6. Then run **02 · Data Analysis Agent** against the active dataset.
 
-The notebook checks the GPU actually assigned by Colab; T4 allocation depends on availability and quota. The model is loaded lazily on its first agent execution.
+The notebook checks the actual runtime. CUDA is preferred when available; CPU-only inference uses FP32 and is slower, with higher RAM requirements. Set `HF_DEVICE=cpu` to force CPU or `HF_DEVICE=cuda` to require a GPU. The model is loaded lazily on its first agent execution.
 
 ## Runtime and core stack
 
 | Layer | Technology |
 |---|---|
-| Notebook/runtime | Google Colab GPU (T4 target) |
+| Notebook/runtime | Google Colab CPU or GPU (T4 target) |
 | Web UX | Gradio Blocks |
 | Agent orchestration | CrewAI |
 | Local language model | Qwen/Qwen2.5-1.5B-Instruct |
-| Model runtime | Hugging Face Transformers + Accelerate |
+| Model runtime | Hugging Face Transformers + Accelerate (FP16 CUDA / FP32 CPU) |
 | Data processing | Python + Pandas |
 | Local analytical store | SQLite |
 | Visualization | Plotly |
 
-Both CrewAI agents use the same local Hugging Face model adapter. No external model API key is required for the public model checkpoint. The agent tools are deterministic Python functions with bounded permissions.
+Both CrewAI agents use the same local Hugging Face model adapter. CUDA uses FP16; CPU uses FP32 and does not require a GPU. CPU inference is supported but may be substantially slower and the 1.5B model needs several GB of available RAM. No external model API key is required for the public model checkpoint. The agent tools are deterministic Python functions with bounded permissions.
 
 ## Scenario 1 — Data Engineering Agent
 
@@ -134,7 +134,7 @@ pip install -r requirements.txt
 python app.py
 ~~~
 
-Open `http://localhost:7860`. To create a temporary Gradio share URL from a trusted environment, set `GRADIO_SHARE=true`.
+Open `http://localhost:7860`. CPU is selected automatically when CUDA is unavailable. To force CPU, set `HF_DEVICE=cpu`; to require CUDA, set `HF_DEVICE=cuda`; `HF_DEVICE=auto` prefers CUDA and falls back to CPU. On CPU, `HF_CPU_THREADS=4` controls the PyTorch thread count. To create a temporary Gradio share URL from a trusted environment, set `GRADIO_SHARE=true`.
 
 ## Repository structure
 
