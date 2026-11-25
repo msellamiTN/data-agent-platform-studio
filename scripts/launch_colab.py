@@ -16,6 +16,17 @@ os.chdir(ROOT)
 
 
 def main() -> None:
+    try:
+        import torch
+    except Exception as exc:
+        raise RuntimeError(
+            "The isolated Colab Python cannot import Torch. Run "
+            "scripts/bootstrap_colab.py from the active notebook kernel first, "
+            "then launch with .venv/bin/python. Do not install a second Torch wheel "
+            "into Colab blindly. Original error: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
+
     from studio.acceptance import run_runtime_acceptance
     from studio.llm import get_local_llm
 
