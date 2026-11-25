@@ -118,3 +118,14 @@ def test_wrong_model_preview_is_overridden_by_count_plan(tmp_path, monkeypatch):
     assert analysis["rows"] == [{"value_count": 3}]
     assert analysis["summary"] == 'Column "titre" contains 3 non-null value(s).'
     assert analysis["orchestration_status"] == "completed"
+
+
+
+def test_analysis_rejects_overlong_question_before_pipeline_lookup(monkeypatch):
+    monkeypatch.setattr(scenarios, "MAX_ANALYSIS_QUESTION_CHARS", 8)
+    try:
+        scenarios.run_data_analysis("this question is too long")
+    except ValueError as exc:
+        assert "8-character limit" in str(exc)
+    else:
+        raise AssertionError("Expected an overlong question to be rejected")
