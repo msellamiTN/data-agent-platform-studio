@@ -16,8 +16,10 @@ import pandas as pd
 from .config import (
     CURRENT_PIPELINE_DIR,
     MAX_UPLOAD_BYTES,
+    MAX_COLUMN_NAME_CHARS,
     MAX_DATA_COLUMNS,
     MAX_DATA_ROWS,
+    MAX_SAMPLE_VALUE_CHARS,
     MAX_BUSINESS_CONTEXT_CHARS,
     PIPELINE_MANIFEST,
     PIPELINE_ROOT,
@@ -88,6 +90,10 @@ def run_csv_pipeline(
         raise ValueError("CSV headers must be valid UTF-8 text.") from exc
     if not headers or any(not str(header).strip() for header in headers):
         raise ValueError("CSV must contain non-empty column names in its first row.")
+    if any(len(str(header).strip()) > MAX_COLUMN_NAME_CHARS for header in headers):
+        raise ValueError(
+            f"CSV column names must not exceed {MAX_COLUMN_NAME_CHARS:,} characters."
+        )
     normalized_headers = [str(header).strip().casefold() for header in headers]
     if len(set(normalized_headers)) != len(normalized_headers):
         raise ValueError("CSV column names must be unique (case-insensitive).")
@@ -149,7 +155,10 @@ def run_csv_pipeline(
                 value = value.isoformat()
             elif hasattr(value, "item"):
                 value = value.item()
-            samples.append(value if isinstance(value, (str, int, float, bool)) else str(value))
+            sample = value if isinstance(value, (str, int, float, bool)) else str(value)
+            if isinstance(sample, str) and len(sample) > MAX_SAMPLE_VALUE_CHARS:
+                sample = sample[:MAX_SAMPLE_VALUE_CHARS] + "…"
+            samples.append(sample)
         column_profile[str(column)] = {
             "dtype": dtype_name,
             "null_count": int(series.isna().sum()),
