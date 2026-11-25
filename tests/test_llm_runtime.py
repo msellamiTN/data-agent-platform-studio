@@ -1,6 +1,11 @@
 import pytest
 
-from studio.runtime import resolve_cpu_threads, resolve_runtime_device
+from studio.runtime import (
+    positive_float_setting,
+    positive_int_setting,
+    resolve_cpu_threads,
+    resolve_runtime_device,
+)
 
 
 def test_auto_prefers_cuda_when_available():
@@ -37,3 +42,28 @@ def test_cpu_threads_accept_positive_integer():
 def test_cpu_threads_reject_invalid_values(value):
     with pytest.raises(ValueError, match="HF_CPU_THREADS"):
         resolve_cpu_threads(value, available=8)
+
+
+
+def test_positive_integer_setting_uses_default():
+    assert positive_int_setting(None, "MAX_UPLOAD_MB", 25) == 25
+
+
+def test_positive_integer_setting_accepts_valid_value():
+    assert positive_int_setting("32", "MAX_UPLOAD_MB", 25) == 32
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "abc"])
+def test_positive_integer_setting_rejects_invalid_value(value):
+    with pytest.raises(ValueError, match="MAX_UPLOAD_MB"):
+        positive_int_setting(value, "MAX_UPLOAD_MB", 25)
+
+
+def test_positive_float_setting_accepts_decimal_value():
+    assert positive_float_setting("2.5", "MAX_SQL_EXECUTION_SECONDS", 5.0) == 2.5
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf", "invalid"])
+def test_positive_float_setting_rejects_invalid_value(value):
+    with pytest.raises(ValueError, match="MAX_SQL_EXECUTION_SECONDS"):
+        positive_float_setting(value, "MAX_SQL_EXECUTION_SECONDS", 5.0)
