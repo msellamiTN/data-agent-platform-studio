@@ -19,7 +19,7 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - name: Install test dependencies
-        run: python -m pip install --upgrade pandas pytest
+        run: python -m pip install --upgrade pandas pytest python-dotenv
       - name: Compile Python sources
         run: python -m compileall -q app.py studio tests
       - name: Run deterministic tool tests
