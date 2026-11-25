@@ -28,6 +28,8 @@ def test_colab_notebook_uses_colab_dependency_profile_and_smoke_checks_imports()
     assert "import gradio" in all_source
     assert "torch.cuda.is_available()" in all_source
     assert "HF_DEVICE" in all_source
+    assert "run_runtime_acceptance(get_local_llm())" in all_source
+    assert "exactly once" in all_source
     assert "pip install torch" not in all_source.casefold()
 
 
