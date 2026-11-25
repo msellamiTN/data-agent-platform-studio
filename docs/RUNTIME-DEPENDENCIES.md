@@ -19,9 +19,9 @@ The error:
 ImportError: cannot import name 'download_url' from 'transformers.utils'
 ```
 
-is associated with dependent code that still imports this legacy symbol. EasyDeL contains such an import. The Data Agent Platform Studio does not use EasyDeL and does not need the `download_url` helper. The Studio now uses the public `AutoTokenizer` and `AutoModelForCausalLM` interfaces instead; the notebook does not test or import the removed legacy helper.
+was made reproducible by the previous notebook preflight itself: it incorrectly attempted to import this legacy helper from `transformers.utils`. That assertion was not required by the Studio and has been removed. The current runtime uses the public `AutoTokenizer` and `AutoModelForCausalLM` interfaces instead.
 
-Do not add EasyDeL to this environment unless a separate feature requires it and its compatibility with the selected Transformers release has been verified.
+A separate third-party caller can still trigger the same error. EasyDeL, for example, contains an import of `download_url` from `transformers.utils`. The Data Agent Platform Studio does not use EasyDeL; do not import or add it to this runtime unless another feature explicitly requires it and its compatibility with the selected Transformers release has been verified.
 
 ## Colab package conflicts
 
