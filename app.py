@@ -473,16 +473,17 @@ def _analysis_handler(question: str):
         note = result.get("provider_note") or ""
         mode = result.get("execution_mode", "unknown")
         status_labels = {
-            "crewai_tool": ("CrewAI read-only tool executed", ""),
-            "validated_query_plan": ("Deterministic query plan verified", ""),
+            "crewai_tool": ("Read-only query executed", ""),
+            "validated_query_plan": ("Deterministic query plan executed", ""),
             "safe_preview_fallback": ("Safe preview only", "warning"),
         }
         status_label, status_class = status_labels.get(mode, ("Execution status unknown", "warning"))
-        heading = (
-            "Verified answer from your Gold dataset"
-            if mode in {"crewai_tool", "validated_query_plan"}
-            else "Preview only · no verified answer"
-        )
+        result_kind = result.get("result_kind", "query_result")
+        heading = {
+            "verified_aggregate": "Verified aggregate from your Gold dataset",
+            "query_result": "Read-only query result · inspect the interpretation",
+            "preview": "Dataset preview · not a business answer",
+        }.get(result_kind, "Read-only query result")
         summary = f"""
 <div class="content-card">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
