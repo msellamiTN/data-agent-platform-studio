@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import html
 import os
+from datetime import datetime
 from typing import Any
 
 import gradio as gr
@@ -9,14 +11,245 @@ import plotly.express as px
 
 from studio.config import SAMPLE_SALES_CSV
 from studio.scenarios import run_data_analysis, run_data_engineering
+from studio.sql import get_current_pipeline
 
+
+# ---------------------------------------------------------------------------
+# Visual system — neutral canvas, deep-navy navigation, calm teal action color
+# ---------------------------------------------------------------------------
 
 CSS = """
-.gradio-container {max-width: 1420px !important; margin: auto !important;}
-#studio-header {padding: 20px 26px; border-radius: 16px; background: linear-gradient(110deg,#10253f,#1e4267); color: white;}
-#studio-header h1 {color: white; margin-bottom: 6px;}
-.scenario-note {border-left: 4px solid #d79a2b; padding: 10px 14px; background: #f8f4eb;}
+:root {
+  --studio-ink: #17253a;
+  --studio-muted: #708096;
+  --studio-line: #e6ebf1;
+  --studio-canvas: #f5f7fa;
+  --studio-card: #ffffff;
+  --studio-navy: #12243a;
+  --studio-blue: #2867d8;
+  --studio-teal: #0e9f8a;
+  --studio-amber: #d99527;
+}
+.gradio-container {
+  max-width: 1520px !important;
+  margin: 0 auto !important;
+  padding: 20px 26px 36px !important;
+  background: var(--studio-canvas) !important;
+}
+body, .gradio-container, .prose, .wrap {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+               "Segoe UI", sans-serif !important;
+}
+#studio-shell { gap: 18px !important; }
+#studio-topbar {
+  display:flex; align-items:center; justify-content:space-between; gap:18px;
+  padding:15px 20px; border:1px solid var(--studio-line); border-radius:16px;
+  background:#fff; box-shadow:0 2px 12px rgba(17,36,58,.035);
+}
+.brand-lockup { display:flex; align-items:center; gap:12px; min-width:0; }
+.brand-mark {
+  width:40px; height:40px; border-radius:12px; display:grid; place-items:center;
+  color:#fff; font-weight:800; letter-spacing:-1px; font-size:16px;
+  background:linear-gradient(145deg,#183b62,#2867d8);
+  box-shadow:0 5px 12px rgba(40,103,216,.2);
+}
+.brand-name { color:var(--studio-ink); font-size:16px; font-weight:750; letter-spacing:-.35px; }
+.brand-sub { color:var(--studio-muted); font-size:11px; margin-top:2px; }
+.topbar-right { display:flex; align-items:center; gap:9px; flex-wrap:wrap; justify-content:flex-end; }
+.top-chip {
+  display:inline-flex; align-items:center; gap:7px; border:1px solid var(--studio-line);
+  border-radius:999px; padding:7px 11px; color:#526276; font-size:11px; font-weight:650;
+  background:#fbfcfd; white-space:nowrap;
+}
+.dot { width:7px; height:7px; border-radius:50%; display:inline-block; background:#0e9f8a; }
+.dot.gray { background:#9aa7b7; }
+#studio-hero {
+  position:relative; overflow:hidden; border-radius:20px; padding:28px 32px;
+  color:white; background:linear-gradient(112deg,#10243a 0%,#183b62 62%,#23558a 100%);
+  box-shadow:0 12px 30px rgba(18,36,58,.10);
+}
+#studio-hero:after {
+  content:""; position:absolute; width:290px; height:290px; border-radius:50%;
+  right:-70px; top:-145px; border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 0 0 28px rgba(255,255,255,.025),0 0 0 58px rgba(255,255,255,.02);
+}
+.hero-eyebrow { color:#a9c8ef; text-transform:uppercase; font-size:10px; letter-spacing:1.7px; font-weight:800; }
+.hero-title { font-size:30px; line-height:1.16; letter-spacing:-1.1px; font-weight:760; margin:10px 0 8px; color:#fff; }
+.hero-copy { color:#d0deed; max-width:760px; font-size:13px; line-height:1.65; }
+.hero-meta { display:flex; gap:8px; flex-wrap:wrap; margin-top:18px; }
+.hero-tag { font-size:10px; border:1px solid rgba(255,255,255,.18); color:#e2edf8; border-radius:999px; padding:6px 10px; background:rgba(255,255,255,.06); }
+.section-kicker { color:#78889c; font-size:10px; font-weight:800; letter-spacing:1.25px; text-transform:uppercase; margin:4px 0 8px; }
+.section-heading { color:var(--studio-ink); font-size:19px; font-weight:760; letter-spacing:-.45px; margin:0 0 4px; }
+.section-sub { color:var(--studio-muted); font-size:12px; line-height:1.55; }
+.kpi-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:14px 0 4px; }
+.kpi-card {
+  background:#fff; border:1px solid var(--studio-line); border-radius:14px; padding:16px 17px;
+  box-shadow:0 2px 10px rgba(17,36,58,.025); min-width:0;
+}
+.kpi-label { color:#7b899a; font-size:10px; font-weight:750; letter-spacing:.75px; text-transform:uppercase; }
+.kpi-value { color:var(--studio-ink); font-size:23px; line-height:1.25; font-weight:780; letter-spacing:-.7px; margin-top:8px; overflow-wrap:anywhere; }
+.kpi-foot { color:#8a97a7; font-size:10px; margin-top:4px; }
+.content-card {
+  background:#fff; border:1px solid var(--studio-line); border-radius:15px; padding:18px;
+  box-shadow:0 2px 10px rgba(17,36,58,.025);
+}
+.pipeline-flow { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:9px; margin:15px 0 4px; }
+.flow-node {
+  border:1px solid #e5ebf2; border-radius:12px; background:#fbfcfe; padding:12px 10px;
+  display:flex; gap:9px; align-items:center; min-width:0;
+}
+.flow-index { width:25px; height:25px; flex:0 0 25px; display:grid; place-items:center; border-radius:8px; background:#edf2f8; color:#51677f; font-size:10px; font-weight:800; }
+.flow-node.done { border-color:#cce9e3; background:#f4fbf9; }
+.flow-node.done .flow-index { background:#d9f2eb; color:#087c69; }
+.flow-label { font-size:11px; font-weight:750; color:#27394e; }
+.flow-detail { font-size:9px; color:#8996a6; margin-top:2px; }
+.agent-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px; }
+.agent-card { border:1px solid var(--studio-line); border-radius:15px; background:#fff; padding:18px; }
+.agent-icon { width:36px; height:36px; display:grid; place-items:center; border-radius:11px; margin-bottom:13px; }
+.agent-icon.blue { background:#eaf1fe; color:#2c68ce; }
+.agent-icon.teal { background:#e3f6f1; color:#0b8c77; }
+.agent-name { color:var(--studio-ink); font-size:14px; font-weight:760; }
+.agent-description { color:var(--studio-muted); font-size:11px; line-height:1.55; margin-top:5px; }
+.agent-steps { display:flex; flex-wrap:wrap; gap:5px; margin-top:12px; }
+.agent-step { padding:5px 8px; border-radius:6px; background:#f3f6fa; color:#596a7f; font-size:9px; font-weight:650; }
+.status-pill {
+  display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:5px 9px;
+  font-size:10px; font-weight:750; background:#e9f7f2; color:#087c69;
+}
+.status-pill.pending { background:#f1f4f7; color:#748397; }
+.status-pill.warning { background:#fff5e5; color:#9c6716; }
+#studio-tabs { background:transparent !important; }
+#studio-tabs button[role="tab"] {
+  border:0 !important; border-bottom:2px solid transparent !important; border-radius:0 !important;
+  background:transparent !important; color:#6b7b8e !important; padding:13px 16px !important;
+  font-weight:700 !important; font-size:12px !important;
+}
+#studio-tabs button[role="tab"][aria-selected="true"] {
+  border-bottom-color:#2867d8 !important; color:#1b3b60 !important;
+}
+#studio-tabs .tabitem { padding-top:18px !important; }
+button.primary {
+  background:#2867d8 !important; border:1px solid #2867d8 !important; border-radius:10px !important;
+  box-shadow:0 5px 12px rgba(40,103,216,.13) !important; font-weight:750 !important;
+}
+button.primary:hover { background:#1e56ba !important; }
+button.secondary { border-radius:10px !important; }
+label, .label-wrap span { color:#34465c !important; font-weight:650 !important; }
+textarea, input, .file-preview, .wrap[data-testid="block-info"] {
+  border-radius:9px !important;
+}
+.output-card { border:1px solid var(--studio-line); border-radius:12px; background:#fff; padding:15px; }
+.output-title { font-size:11px; font-weight:800; letter-spacing:.7px; color:#738398; text-transform:uppercase; }
+.output-value { color:#1d344d; font-size:15px; font-weight:760; margin-top:6px; }
+.empty-state {
+  border:1px dashed #cbd5e1; border-radius:14px; background:#fbfcfe; padding:22px;
+  color:#697b90; text-align:center; font-size:12px; line-height:1.6;
+}
+.helper-note { color:#8290a0; font-size:10px; line-height:1.55; }
+#studio-footer { color:#8a97a7; font-size:10px; padding:7px 2px; border-top:1px solid #e6ebf1; }
+@media (max-width: 850px) {
+  .gradio-container { padding:12px !important; }
+  #studio-topbar { align-items:flex-start; flex-direction:column; }
+  .hero-title { font-size:24px; }
+  #studio-hero { padding:22px; }
+  .kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .pipeline-flow { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .agent-grid { grid-template-columns:1fr; }
+}
 """
+
+
+def _runtime_label() -> str:
+    try:
+        import torch
+        if torch.cuda.is_available():
+            name = torch.cuda.get_device_name(0)
+            return f"GPU · {name}"
+    except Exception:
+        pass
+    return "Runtime · CPU"
+
+
+def _escape(value: Any) -> str:
+    return html.escape(str(value if value is not None else ""))
+
+
+def _read_pipeline() -> dict[str, Any] | None:
+    try:
+        return get_current_pipeline()
+    except Exception:
+        return None
+
+
+def _pipeline_dashboard(manifest: dict[str, Any] | None = None) -> str:
+    manifest = manifest if manifest is not None else _read_pipeline()
+    ready = bool(manifest and manifest.get("status") == "READY")
+    if ready:
+        dataset = _escape(manifest.get("dataset", "Dataset"))
+        pipeline_id = _escape(manifest.get("pipeline_id", "—"))
+        rows_before = int(manifest.get("rows_before", 0))
+        rows_after = int(manifest.get("rows_after", 0))
+        duplicates = int(manifest.get("duplicates_removed", 0))
+        columns = len(manifest.get("columns", []))
+        created = _escape(manifest.get("created_at", ""))
+        stamp = created.replace("T", " ").split(".")[0].replace("+00:00", " UTC")
+        status_html = '<span class="status-pill"><span class="dot"></span>Pipeline ready</span>'
+        kpis = f"""
+        <div class="kpi-grid">
+          <div class="kpi-card"><div class="kpi-label">Active dataset</div><div class="kpi-value">{dataset}</div><div class="kpi-foot">Current pipeline source</div></div>
+          <div class="kpi-card"><div class="kpi-label">Curated records</div><div class="kpi-value">{rows_after:,}</div><div class="kpi-foot">From {rows_before:,} source rows</div></div>
+          <div class="kpi-card"><div class="kpi-label">Columns profiled</div><div class="kpi-value">{columns}</div><div class="kpi-foot">Semantic metadata available</div></div>
+          <div class="kpi-card"><div class="kpi-label">Duplicates removed</div><div class="kpi-value">{duplicates:,}</div><div class="kpi-foot">Exact duplicate records</div></div>
+        </div>
+        """
+        flow = """
+        <div class="pipeline-flow">
+          <div class="flow-node done"><div class="flow-index">01</div><div><div class="flow-label">Source</div><div class="flow-detail">Captured</div></div></div>
+          <div class="flow-node done"><div class="flow-index">02</div><div><div class="flow-label">Bronze</div><div class="flow-detail">Raw copy</div></div></div>
+          <div class="flow-node done"><div class="flow-index">03</div><div><div class="flow-label">Silver</div><div class="flow-detail">Cleaned</div></div></div>
+          <div class="flow-node done"><div class="flow-index">04</div><div><div class="flow-label">Gold</div><div class="flow-detail">Query ready</div></div></div>
+          <div class="flow-node done"><div class="flow-index">05</div><div><div class="flow-label">Manifest</div><div class="flow-detail">Published</div></div></div>
+        </div>
+        """
+        footer = f'<div class="helper-note" style="margin-top:10px">Pipeline ID: <b>{pipeline_id}</b> &nbsp;·&nbsp; Created: {stamp}</div>'
+    else:
+        status_html = '<span class="status-pill pending"><span class="dot gray"></span>No active pipeline</span>'
+        kpis = """
+        <div class="kpi-grid">
+          <div class="kpi-card"><div class="kpi-label">Active dataset</div><div class="kpi-value">—</div><div class="kpi-foot">Run Data Engineering first</div></div>
+          <div class="kpi-card"><div class="kpi-label">Curated records</div><div class="kpi-value">—</div><div class="kpi-foot">No Gold table yet</div></div>
+          <div class="kpi-card"><div class="kpi-label">Columns profiled</div><div class="kpi-value">—</div><div class="kpi-foot">Awaiting source data</div></div>
+          <div class="kpi-card"><div class="kpi-label">Duplicates removed</div><div class="kpi-value">—</div><div class="kpi-foot">Not evaluated</div></div>
+        </div>
+        """
+        flow = """
+        <div class="pipeline-flow">
+          <div class="flow-node"><div class="flow-index">01</div><div><div class="flow-label">Source</div><div class="flow-detail">Waiting</div></div></div>
+          <div class="flow-node"><div class="flow-index">02</div><div><div class="flow-label">Bronze</div><div class="flow-detail">Waiting</div></div></div>
+          <div class="flow-node"><div class="flow-index">03</div><div><div class="flow-label">Silver</div><div class="flow-detail">Waiting</div></div></div>
+          <div class="flow-node"><div class="flow-index">04</div><div><div class="flow-label">Gold</div><div class="flow-detail">Waiting</div></div></div>
+          <div class="flow-node"><div class="flow-index">05</div><div><div class="flow-label">Manifest</div><div class="flow-detail">Waiting</div></div></div>
+        </div>
+        """
+        footer = '<div class="helper-note" style="margin-top:10px">Your analysis workspace will become available once the first pipeline run is complete.</div>'
+
+    return f"""
+    <div class="content-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div><div class="section-kicker">Pipeline monitor</div><div class="section-heading">Your data workspace</div></div>
+        {status_html}
+      </div>
+      {kpis}
+      <div style="height:1px;background:#edf1f5;margin:16px 0 8px"></div>
+      <div class="section-kicker">Data lifecycle</div>
+      {flow}
+      {footer}
+    </div>
+    """
+
+
+def _overview_refresh() -> str:
+    return _pipeline_dashboard()
 
 
 def _engineering_handler(
@@ -39,23 +272,44 @@ def _engineering_handler(
             drop_empty_rows=drop_empty_rows,
             business_context=business_context,
         )
-        mode_note = (
-            "CrewAI called the bounded pipeline tool."
-            if result["execution_mode"] == "crewai_tool"
-            else "The deterministic Python pipeline ran because CrewAI did not complete the tool call."
-        )
+        report = result["report"]
+        rows_before = int(report.get("rows_before", 0))
+        rows_after = int(report.get("rows_after", 0))
+        removed = int(report.get("duplicates_removed", 0))
+        mode = "CrewAI tool" if result["execution_mode"] == "crewai_tool" else "Python fallback"
+        summary = f"""
+<div class="content-card">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <div><div class="section-kicker">Execution complete</div><div class="section-heading">Pipeline published successfully</div></div>
+    <span class="status-pill"><span class="dot"></span>Ready</span>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-label">Source rows</div><div class="kpi-value">{rows_before:,}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Silver rows</div><div class="kpi-value">{rows_after:,}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Duplicates removed</div><div class="kpi-value">{removed:,}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Agent execution</div><div class="kpi-value" style="font-size:15px">{_escape(mode)}</div></div>
+  </div>
+  <div class="helper-note">Pipeline ID: <b>{_escape(report.get("pipeline_id"))}</b> · Gold table: <b>silver_data</b></div>
+</div>
+"""
         if result.get("crew_error"):
-            mode_note += "\n\nCrewAI/model detail: " + result["crew_error"]
+            summary += f'<div class="helper-note" style="margin-top:8px">CrewAI note: {_escape(result["crew_error"])}</div>'
         return (
-            result["report"],
+            summary,
+            report,
             result["cleaned_file"],
             result["preview"],
-            result["report"],
-            result["summary"] + "\n\n**Execution:** " + mode_note,
+            _pipeline_dashboard(report),
         )
     except Exception as exc:
-        error = {"error": f"{type(exc).__name__}: {exc}"}
-        return error, None, pd.DataFrame(), error, "Pipeline failed."
+        message = f"{type(exc).__name__}: {exc}"
+        return (
+            f'<div class="content-card"><span class="status-pill warning">Pipeline needs attention</span><p>{_escape(message)}</p></div>',
+            {"error": message},
+            None,
+            pd.DataFrame(),
+            _pipeline_dashboard(),
+        )
 
 
 def _analysis_handler(question: str):
@@ -77,126 +331,271 @@ def _analysis_handler(question: str):
                     frame,
                     x=categorical[0],
                     y=numeric[0],
-                    title="Data Analysis Agent · Gold dataset",
+                    title="Analysis result",
                     template="plotly_white",
                 )
+                figure.update_layout(
+                    margin=dict(l=16, r=16, t=54, b=16),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(family="Inter, sans-serif", color="#53657a"),
+                )
 
-        summary = result["summary"]
+        answer = result["summary"]
         note = result.get("provider_note") or ""
-        if note:
-            summary += "\n\n**Data context:** " + note
+        mode = result.get("execution_mode", "unknown")
+        summary = f"""
+<div class="content-card">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <div><div class="section-kicker">Analysis complete</div><div class="section-heading">Answer from your Gold dataset</div></div>
+    <span class="status-pill"><span class="dot"></span>{_escape(mode)}</span>
+  </div>
+  <div style="color:#34465c;font-size:13px;line-height:1.7;margin-top:12px">{_escape(answer)}</div>
+  <div class="helper-note" style="margin-top:12px">{_escape(note)}</div>
+</div>
+"""
         if result.get("crew_error"):
-            summary += "\n\n**CrewAI/model detail:** " + result["crew_error"]
-        summary += "\n\n**Execution mode:** " + result["execution_mode"]
+            summary += f'<div class="helper-note" style="margin-top:8px">Agent note: {_escape(result["crew_error"])}</div>'
         return result.get("sql", ""), frame, figure, summary
     except Exception as exc:
+        message = f"{type(exc).__name__}: {exc}"
         return "", pd.DataFrame(), None, (
-            f"**Analysis failed:** {type(exc).__name__}: {exc}"
+            f'<div class="content-card"><span class="status-pill warning">Analysis could not run</span><p>{_escape(message)}</p><div class="helper-note">Run the Data Engineering pipeline first, then retry your question.</div></div>'
         )
 
 
+# ---------------------------------------------------------------------------
+# Application composition
+# ---------------------------------------------------------------------------
+
+runtime_label = _escape(_runtime_label())
 with gr.Blocks(
     title="Data Agent Platform Studio",
-    theme=gr.themes.Soft(primary_hue="blue", secondary_hue="amber", neutral_hue="slate"),
+    theme=gr.themes.Soft(
+        primary_hue="blue",
+        secondary_hue="teal",
+        neutral_hue="slate",
+        radius_size="lg",
+        spacing_size="md",
+    ),
     css=CSS,
 ) as demo:
-    gr.Markdown(
-        """
-        <div id="studio-header">
-        <h1>Data Agent Platform Studio</h1>
-        <p>One shared data pipeline · Two specialized CrewAI agents · Local Hugging Face model · Colab T4</p>
-        </div>
-        """
-    )
-    gr.Markdown(
-        "**One dataset, one lineage, two agents.** The Data Engineering Agent prepares "
-        "the shared Bronze/Silver/Gold pipeline. The Data Analysis Agent consumes that "
-        "exact Gold dataset. Both agents run locally through CrewAI and the same "
-        "Hugging Face model on the Colab GPU.",
-        elem_classes=["scenario-note"],
-    )
+    with gr.Column(elem_id="studio-shell", equal_height=False):
+        gr.HTML(
+            f"""
+            <div id="studio-topbar">
+              <div class="brand-lockup">
+                <div class="brand-mark">DA</div>
+                <div><div class="brand-name">Data Agent Studio</div><div class="brand-sub">Independent data intelligence workspace</div></div>
+              </div>
+              <div class="topbar-right">
+                <span class="top-chip"><span class="dot"></span>Local model · Qwen 1.5B</span>
+                <span class="top-chip">{runtime_label}</span>
+                <span class="top-chip">CrewAI orchestration</span>
+              </div>
+            </div>
+            """
+        )
 
-    with gr.Tabs():
-        with gr.Tab("01 · Data Engineering Agent"):
-            gr.Markdown("## Prepare and publish the shared data pipeline")
-            gr.Markdown(
-                "Upload one CSV or use the built-in Retail Sales example. This run creates "
-                "the active dataset manifest that the Data Analysis Agent will consume."
-            )
-            with gr.Row():
-                with gr.Column(scale=1):
-                    de_file = gr.File(
-                        label="Source CSV (optional — use Retail Sales demo when empty)",
-                        file_types=[".csv"],
-                        type="filepath",
-                    )
-                    de_trim = gr.Checkbox(value=True, label="Trim text fields")
-                    de_duplicates = gr.Checkbox(value=True, label="Remove exact duplicates")
-                    de_empty = gr.Checkbox(value=True, label="Remove fully empty rows")
-                    de_context = gr.Textbox(
-                        label="Business context / dataset description (optional)",
-                        placeholder="Example: Retail sales by product, region and order date. Revenue is net sales in TND.",
-                        lines=3,
-                    )
-                    de_run = gr.Button("Run Data Engineering Agent", variant="primary")
-                with gr.Column(scale=2):
-                    de_summary = gr.Markdown("Run the pipeline to prepare the shared dataset.")
-                    de_report = gr.JSON(label="Pipeline quality report and lineage")
-            with gr.Row():
-                de_download = gr.File(label="Silver · cleaned CSV")
-                de_preview = gr.Dataframe(label="Silver data preview", interactive=False)
-            de_manifest = gr.JSON(label="Active pipeline manifest")
-            de_run.click(
-                _engineering_handler,
-                inputs=[de_file, de_trim, de_duplicates, de_empty, de_context],
-                outputs=[de_report, de_download, de_preview, de_manifest, de_summary],
-            )
+        with gr.Tabs(elem_id="studio-tabs"):
+            with gr.Tab("Overview", id="overview"):
+                gr.HTML(
+                    """
+                    <div id="studio-hero">
+                      <div class="hero-eyebrow">Data Agent Platform Studio</div>
+                      <div class="hero-title">Your data. One pipeline.<br/>Two intelligent specialists.</div>
+                      <div class="hero-copy">Prepare trusted data once, then explore it with a local AI analyst. A shared Bronze → Silver → Gold pipeline keeps both agents grounded in the same dataset and lineage.</div>
+                      <div class="hero-meta">
+                        <span class="hero-tag">01 · Data Engineering</span>
+                        <span class="hero-tag">02 · Data Analysis</span>
+                        <span class="hero-tag">Local inference · Colab GPU</span>
+                      </div>
+                    </div>
+                    """
+                )
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        gr.HTML('<div class="section-kicker">Workspace at a glance</div><div class="section-heading">Pipeline overview</div><div class="section-sub">A live view of the active dataset prepared by the Engineering Agent.</div>')
+                    with gr.Column(scale=0, min_width=130):
+                        refresh_overview = gr.Button("Refresh status", size="sm", variant="secondary")
+                overview_dashboard = gr.HTML(value=_pipeline_dashboard())
+                refresh_overview.click(_overview_refresh, inputs=[], outputs=[overview_dashboard])
 
-        with gr.Tab("02 · Data Analysis Agent"):
-            gr.Markdown("## Ask business questions about the active Gold dataset")
-            gr.Markdown(
-                "This agent does not load a second dataset. It reads the manifest and schema "
-                "published by the Data Engineering Agent, generates a query for the actual "
-                "columns, and executes it through the read-only SQL tool."
-            )
-            with gr.Row():
-                with gr.Column(scale=1):
-                    da_question = gr.Textbox(
-                        label="Business question",
-                        value="What is the revenue by region in the first quarter?",
-                        lines=3,
-                    )
-                    gr.Examples(
-                        examples=[
-                            ["What is the revenue by region in the first quarter?"],
-                            ["Show total sales by product."],
-                            ["Which region has the highest revenue?"],
-                            ["Show the 5 rows with the highest revenue."],
-                            ["Summarize the columns and data quality of this dataset."],
-                        ],
-                        inputs=[da_question],
-                    )
-                    da_run = gr.Button("Run Data Analysis Agent", variant="primary")
-                with gr.Column(scale=2):
-                    da_summary = gr.Markdown("Analysis result will appear here.")
-                    da_sql = gr.Code(label="Generated SQL · read only", language="sql")
-            da_table = gr.Dataframe(label="Query result", interactive=False)
-            da_plot = gr.Plot(label="Result visualization")
-            da_run.click(
-                _analysis_handler,
-                inputs=[da_question],
-                outputs=[da_sql, da_table, da_plot, da_summary],
-            )
+                gr.HTML(
+                    """
+                    <div style="margin:18px 0 10px"><div class="section-kicker">Your AI team</div><div class="section-heading">Two agents. One shared context.</div><div class="section-sub">Each specialist has a dedicated responsibility and a clear hand-off.</div></div>
+                    <div class="agent-grid">
+                      <div class="agent-card">
+                        <div class="agent-icon blue">
+                          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16M4 12h16M4 19h16"/><path d="m8 2-4 3 4 3M16 9l4 3-4 3M8 16l-4 3 4 3"/></svg>
+                        </div>
+                        <div class="agent-name">Data Engineering Agent</div>
+                        <div class="agent-description">Ingests, profiles, cleans and publishes the shared data pipeline with quality and semantic metadata.</div>
+                        <div class="agent-steps"><span class="agent-step">Ingest</span><span class="agent-step">Profile</span><span class="agent-step">Transform</span><span class="agent-step">Publish</span></div>
+                      </div>
+                      <div class="agent-card">
+                        <div class="agent-icon teal">
+                          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5m0 14h17"/><path d="m7 15 4-4 3 2 5-7"/></svg>
+                        </div>
+                        <div class="agent-name">Data Analysis Agent</div>
+                        <div class="agent-description">Uses the active Gold dataset, understands its schema and business context, then answers with governed SQL.</div>
+                        <div class="agent-steps"><span class="agent-step">Understand</span><span class="agent-step">Query</span><span class="agent-step">Analyze</span><span class="agent-step">Explain</span></div>
+                      </div>
+                    </div>
+                    """
+                )
 
-    gr.Markdown(
-        """
-        ---
-        **Platform capabilities:** shared pipeline manifest, schema and semantic metadata,
-        user-supplied business context, data-quality profiling, source-to-Gold lineage,
-        bounded CrewAI tools, SQL read-only policy, result limits and execution trace.
-        Both agents run independently on the local Colab GPU; no external agent service is called.
-        """
-    )
+            with gr.Tab("Data Engineering", id="engineering"):
+                gr.HTML(
+                    """
+                    <div style="margin-bottom:18px">
+                      <div class="section-kicker">Workspace 01 / Engineering</div>
+                      <div class="section-heading">Build your data pipeline</div>
+                      <div class="section-sub">Bring a source dataset, define its business meaning and publish a curated Gold table for downstream analysis.</div>
+                    </div>
+                    <div class="pipeline-flow" style="margin-bottom:18px">
+                      <div class="flow-node"><div class="flow-index">01</div><div><div class="flow-label">Source</div><div class="flow-detail">Upload CSV</div></div></div>
+                      <div class="flow-node"><div class="flow-index">02</div><div><div class="flow-label">Bronze</div><div class="flow-detail">Preserve raw</div></div></div>
+                      <div class="flow-node"><div class="flow-index">03</div><div><div class="flow-label">Silver</div><div class="flow-detail">Clean & profile</div></div></div>
+                      <div class="flow-node"><div class="flow-index">04</div><div><div class="flow-label">Gold</div><div class="flow-detail">Query ready</div></div></div>
+                      <div class="flow-node"><div class="flow-index">05</div><div><div class="flow-label">Manifest</div><div class="flow-detail">Context hand-off</div></div></div>
+                    </div>
+                    """
+                )
+                with gr.Row(equal_height=False):
+                    with gr.Column(scale=5, min_width=330):
+                        with gr.Group():
+                            gr.Markdown("### 1. Source and business context")
+                            de_file = gr.File(
+                                label="Upload a CSV source",
+                                file_types=[".csv"],
+                                type="filepath",
+                            )
+                            gr.Markdown('<div class="helper-note">No file? Leave this empty to use the bundled Retail Sales demo dataset. Maximum upload size: 25 MB.</div>')
+                            de_context = gr.Textbox(
+                                label="Business description",
+                                placeholder="Example: Retail sales by product, region and order date. Revenue is net sales in TND.",
+                                lines=3,
+                            )
+                        with gr.Group():
+                            gr.Markdown("### 2. Data quality rules")
+                            de_trim = gr.Checkbox(value=True, label="Trim whitespace in text fields")
+                            de_duplicates = gr.Checkbox(value=True, label="Remove exact duplicate rows")
+                            de_empty = gr.Checkbox(value=True, label="Remove fully empty rows")
+                            gr.Markdown('<div class="helper-note">These rules are deterministic Python operations. The agent orchestrates the pipeline and summarizes the verified output.</div>')
+                        de_run = gr.Button("Run data pipeline", variant="primary", size="lg")
+                    with gr.Column(scale=7, min_width=360):
+                        gr.Markdown("### Pipeline execution")
+                        de_summary = gr.HTML(value='<div class="empty-state">Your execution summary will appear here after the pipeline runs.</div>')
+                        with gr.Accordion("Quality report and column profile", open=False):
+                            de_report = gr.JSON(label="Pipeline report")
+                        with gr.Accordion("Silver data preview", open=True):
+                            de_preview = gr.Dataframe(label="Curated records", interactive=False)
+                            de_download = gr.File(label="Download cleaned CSV")
+                        with gr.Accordion("Active pipeline manifest", open=False):
+                            de_manifest = gr.JSON(label="Bronze / Silver / Gold lineage")
+
+                de_run.click(
+                    _engineering_handler,
+                    inputs=[de_file, de_trim, de_duplicates, de_empty, de_context],
+                    outputs=[de_summary, de_report, de_download, de_preview, de_manifest],
+                )
+
+            with gr.Tab("Data Analysis", id="analysis"):
+                gr.HTML(
+                    """
+                    <div style="margin-bottom:18px">
+                      <div class="section-kicker">Workspace 02 / Analysis</div>
+                      <div class="section-heading">Ask your data anything</div>
+                      <div class="section-sub">The Analyst Agent reads the active Gold dataset. No second upload, no disconnected demo data.</div>
+                    </div>
+                    """
+                )
+                with gr.Row(equal_height=False):
+                    with gr.Column(scale=5, min_width=330):
+                        with gr.Group():
+                            gr.Markdown("### Ask a business question")
+                            da_question = gr.Textbox(
+                                label="Your question",
+                                placeholder="e.g. Which region generated the highest revenue?",
+                                lines=4,
+                            )
+                            gr.Examples(
+                                examples=[
+                                    ["What is the revenue by region in the first quarter?"],
+                                    ["Show total sales by product."],
+                                    ["Which region has the highest revenue?"],
+                                    ["Show the 5 rows with the highest revenue."],
+                                    ["Summarize the columns and data quality of this dataset."],
+                                ],
+                                inputs=[da_question],
+                                label="Suggested questions",
+                            )
+                            da_run = gr.Button("Analyze dataset", variant="primary", size="lg")
+                        gr.HTML(
+                            """
+                            <div class="content-card" style="margin-top:12px">
+                              <div class="section-kicker">How it works</div>
+                              <div style="font-size:12px;line-height:1.8;color:#5d6e81">
+                                <b>01</b> Read pipeline manifest<br/>
+                                <b>02</b> Inspect real schema and semantic metadata<br/>
+                                <b>03</b> Generate one SELECT query<br/>
+                                <b>04</b> Execute with read-only controls
+                              </div>
+                            </div>
+                            """
+                        )
+                    with gr.Column(scale=7, min_width=360):
+                        gr.Markdown("### Agent response")
+                        da_summary = gr.HTML(value='<div class="empty-state">Your answer, query and result visualization will appear here.</div>')
+                        with gr.Accordion("SQL generated by the agent", open=False):
+                            da_sql = gr.Code(label="Read-only SQL", language="sql")
+                        with gr.Accordion("Query result rows", open=True):
+                            da_table = gr.Dataframe(label="Result set", interactive=False)
+                        da_plot = gr.Plot(label="Visualization")
+
+                da_run.click(
+                    _analysis_handler,
+                    inputs=[da_question],
+                    outputs=[da_sql, da_table, da_plot, da_summary],
+                )
+
+            with gr.Tab("Platform", id="platform"):
+                gr.HTML(
+                    """
+                    <div style="margin-bottom:18px">
+                      <div class="section-kicker">Platform / Architecture</div>
+                      <div class="section-heading">A controlled local agent runtime</div>
+                      <div class="section-sub">The Studio keeps data operations explicit and the model replaceable.</div>
+                    </div>
+                    <div class="content-card">
+                      <div class="section-kicker">Execution stack</div>
+                      <div class="pipeline-flow">
+                        <div class="flow-node done"><div class="flow-index">01</div><div><div class="flow-label">Gradio</div><div class="flow-detail">User experience</div></div></div>
+                        <div class="flow-node done"><div class="flow-index">02</div><div><div class="flow-label">CrewAI</div><div class="flow-detail">Orchestration</div></div></div>
+                        <div class="flow-node done"><div class="flow-index">03</div><div><div class="flow-label">Qwen 1.5B</div><div class="flow-detail">Local inference</div></div></div>
+                        <div class="flow-node done"><div class="flow-index">04</div><div><div class="flow-label">Python tools</div><div class="flow-detail">Execution</div></div></div>
+                        <div class="flow-node done"><div class="flow-index">05</div><div><div class="flow-label">SQLite</div><div class="flow-detail">Gold storage</div></div></div>
+                      </div>
+                    </div>
+                    <div class="agent-grid" style="margin-top:14px">
+                      <div class="agent-card"><div class="agent-name">Model boundary</div><div class="agent-description">Qwen2.5-1.5B-Instruct runs through Transformers on the Colab GPU. It plans and explains; Python tools perform bounded data operations.</div></div>
+                      <div class="agent-card"><div class="agent-name">Data safety</div><div class="agent-description">The analysis tool accepts one SELECT/WITH statement, opens SQLite read-only, applies a SQLite authorizer and caps results at 100 rows.</div></div>
+                    </div>
+                    <div class="content-card" style="margin-top:14px">
+                      <div class="section-kicker">Runtime note</div>
+                      <div class="section-sub">A Colab T4 is the target, but actual GPU allocation depends on Colab availability and quota. Gradio share links are public to anyone who obtains them. Use synthetic data for this lab.</div>
+                    </div>
+                    """
+                )
+
+        gr.HTML(
+            """
+            <div id="studio-footer">
+              DATA AGENT PLATFORM STUDIO &nbsp;·&nbsp; INDEPENDENT LOCAL AGENTS &nbsp;·&nbsp; CREWAI + HUGGING FACE
+            </div>
+            """
+        )
 
 
 if __name__ == "__main__":
