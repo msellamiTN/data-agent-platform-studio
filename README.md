@@ -113,7 +113,10 @@ The agent must inspect the schema before generating SQL. It cannot query an assu
 - SQLite is opened with read-only mode.
 - A SQLite authorizer permits reads only from the canonical `silver_data` table and blocks writes, schema access and unsafe functions.
 - Query execution is interrupted after the configured `MAX_SQL_EXECUTION_SECONDS` budget (default: 5 seconds).
-- Query output is capped at 100 rows.
+- Query output is capped at 100 rows, a configurable total response-byte budget and a configurable per-cell character limit.
+- Returned values are normalized to JSON-safe scalars; BLOB contents are omitted and marked, and truncated cells/rows are disclosed.
+- SQL rows are streamed one at a time within SQLite's configured value/row size limits; the full result set is not materialized before the response budget is checked.
+- The local model prompt is capped at `MAX_INPUT_TOKENS`; oversized prompts are rejected rather than silently truncating system instructions.
 - Common row-count, column-count and distinct-count intents are planned against real schema names; an ambiguous count request returns a clarification instead of silently showing a preview.
 
 If the small local model does not complete its tool call, the application uses a clearly labeled Python fallback. The fallback supports only explicitly implemented schema-aware query patterns; a row preview is labeled as a preview and is never presented as an aggregate answer. Count questions generate `COUNT` / `COUNT(DISTINCT ...)` queries against a matching real column. The UI distinguishes CrewAI tool execution, deterministic query-plan verification and preview-only fallback. A verified aggregate answer is composed from the actual SQL result, not from unverified model narration.
@@ -206,7 +209,7 @@ Tests cover immutable run publication, active-manifest switching, failed-run iso
 - This is an educational prototype, not a production multi-tenant service.
 - Anyone who obtains the Gradio share URL may be able to access the demo; use synthetic data only.
 - Colab storage is temporary; download outputs you need to keep.
-- Uploads are limited to 25 MB, 250,000 parsed rows and 250 columns. Column names must be non-empty and unique case-insensitively. Business context and analysis questions have configurable character limits.
+- Uploads are limited to 25 MB, 250,000 parsed rows and 250 columns. Column names must be non-empty, unique case-insensitively and no longer than 128 characters. Semantic sample values are shortened before they are exposed to the model. Business context and analysis questions have configurable character limits.
 - The Data Engineering Agent has a fixed ETL tool; it has no shell or arbitrary Python execution tool.
 - The Data Analysis Agent has schema-inspection and read-only SQL tools; it cannot write to the database.
 - The model proposes and explains; Python performs the data operations and enforces policy.
