@@ -32,7 +32,10 @@ flowchart LR
 5. Run **01 · Data Engineering Agent** first.
 6. Then run **02 · Data Analysis Agent** against the active dataset.
 
-The Colab notebook performs live runtime acceptance before launching: one direct local inference and one real CrewAI invocation of a registered Python tool. It uses the same cached adapter in that notebook kernel, so the app can reuse the warmed model. Local app startup remains lazy unless you run the acceptance command first. The install requirements pin Pillow 11.3.0 to avoid a known `_Ink` import mismatch in some Colab images; if Pillow was already imported before installation, restart the runtime before importing Gradio or CrewAI.
+The Colab notebook installs the pinned Transformers/Hub compatibility set and checks the `download_url` legacy API explicitly. It then performs live runtime acceptance before launching: one direct local inference and one real CrewAI invocation of a registered Python tool. It uses the same cached adapter in that notebook kernel, so the app can reuse the warmed model. Local app startup remains lazy unless you run the acceptance command first. The install requirements pin Pillow 11.3.0 to avoid a known `_Ink` import mismatch in some Colab images; if Pillow was already imported before installation, restart the runtime before importing Gradio or CrewAI.
+
+
+See [Hugging Face runtime compatibility](docs/RUNTIME-DEPENDENCIES.md) for the version rationale and recovery steps.
 
 ## Runtime and core stack
 
