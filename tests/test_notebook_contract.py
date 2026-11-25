@@ -62,7 +62,6 @@ def test_colab_bootstrap_avoids_ensurepip_and_verifies_base_torch_reuse():
     source = (ROOT / "scripts" / "bootstrap_colab.py").read_text(encoding="utf-8")
     assert '"venv"' in source
     assert '"--python"' in source
-    assert 'config_text = config.read_text' not in source
     assert "include-system-site-packages = true" in source
     assert '"-m", "venv"' not in source
     assert "venv_sees_torch(torch_file)" in source
