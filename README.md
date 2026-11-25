@@ -32,14 +32,14 @@ flowchart LR
 5. Run **01 · Data Engineering Agent** first.
 6. Then run **02 · Data Analysis Agent** against the active dataset.
 
-The Colab notebook installs the pinned Transformers/Hub compatibility set and checks the `download_url` legacy API explicitly. It then performs live runtime acceptance before launching: one direct local inference and one real CrewAI invocation of a registered Python tool. It uses the same cached adapter in that notebook kernel, so the app can reuse the warmed model. Local app startup remains lazy unless you run the acceptance command first. The install requirements pin Pillow 11.3.0 to avoid a known `_Ink` import mismatch in some Colab images; if Pillow was already imported before installation, restart the runtime before importing Gradio or CrewAI.
+The Colab notebook uses `transformers==5.24.1` with `huggingface-hub==1.32.0`, which satisfies the current Diffusers Hub requirement while keeping the Studio on the supported Transformers 5 API. Its Colab-only compatibility requirements also resolve the observed NumPy/Numba, OpenTelemetry/Google ADK, Rich/BigFrames, fsspec/GCSFS/Datasets, oauthlib/Tweepy and IPython/Jedi conflicts. The notebook runs `pip check`, imports the public Transformers tokenizer/model classes, then performs live runtime acceptance before launching: one direct local inference and one real CrewAI invocation of a registered Python tool. It uses the same cached adapter in that notebook kernel, so the app can reuse the warmed model. Local app startup remains lazy unless you run the acceptance command first. The install requirements retain the documented Pillow 11.3.0 compatibility pin. If the notebook detects that affected packages were already imported, it stops before installation and tells you to select **Runtime → Restart session**, then rerun from the top.
 
 
 See [Hugging Face runtime compatibility](docs/RUNTIME-DEPENDENCIES.md) for the version rationale and recovery steps.
 
 ## Runtime and core stack
 
-The Hugging Face compatibility set is intentionally pinned to `transformers==4.57.6` and `huggingface-hub==0.36.2`; it is shared by Colab, local installation and CI. Do not independently upgrade these two libraries to unbounded latest versions.
+The Hugging Face compatibility set is intentionally pinned to `transformers==5.24.1` and `huggingface-hub==1.32.0`; it is shared by Colab, local installation and CI. The latter satisfies both Transformers 5.24.1 and the current Diffusers 0.42.1 minimum. Use the shared file rather than independently upgrading either library.
 
 | Layer | Technology |
 |---|---|
@@ -179,6 +179,7 @@ To validate the real local model and CrewAI tool loop before opening the UI, run
 │   └── test_sql_guard.py
 ├── requirements-hf-compat.txt
 ├── requirements-core.txt
+├── requirements-colab-runtime.txt
 ├── requirements-colab.txt
 ├── requirements.txt
 └── requirements-dev.txt
