@@ -15,6 +15,9 @@ import pandas as pd
 from .config import (
     CURRENT_PIPELINE_DIR,
     MAX_UPLOAD_BYTES,
+    MAX_DATA_COLUMNS,
+    MAX_DATA_ROWS,
+    MAX_BUSINESS_CONTEXT_CHARS,
     PIPELINE_MANIFEST,
     PIPELINE_ROOT,
     WORKSPACE_DIR,
@@ -72,7 +75,20 @@ def run_csv_pipeline(
     immutable SQLite database while a later run is being prepared.
     """
     source = _workspace_file(csv_path)
-    frame = pd.read_csv(source)
+    context = business_context.strip()
+    if len(context) > MAX_BUSINESS_CONTEXT_CHARS:
+        raise ValueError(
+            f"Business description exceeds the {MAX_BUSINESS_CONTEXT_CHARS:,}-character limit."
+        )
+    frame = pd.read_csv(source, nrows=MAX_DATA_ROWS + 1)
+    if len(frame) > MAX_DATA_ROWS:
+        raise ValueError(
+            f"CSV exceeds the {MAX_DATA_ROWS:,}-row processing limit."
+        )
+    if len(frame.columns) > MAX_DATA_COLUMNS:
+        raise ValueError(
+            f"CSV exceeds the {MAX_DATA_COLUMNS:,}-column processing limit."
+        )
     if frame.empty:
         raise ValueError("The uploaded CSV contains no data rows.")
     if len(frame.columns) == 0:
@@ -136,7 +152,7 @@ def run_csv_pipeline(
         "dimensions": dimensions,
         "measures": measures,
         "date_columns": date_columns,
-        "business_context": business_context.strip(),
+        "business_context": context,
         "classification_note": "Heuristic candidates inferred from column names and pandas dtypes; validate before business-critical use.",
     }
 
@@ -181,7 +197,7 @@ def run_csv_pipeline(
             "columns": [str(column) for column in frame.columns],
             "column_profile": column_profile,
             "semantic_catalog": semantic_catalog,
-            "business_context": business_context.strip(),
+            "business_context": context,
             "layers": {
                 "bronze": str(bronze_file),
                 "silver": str(silver_file),
