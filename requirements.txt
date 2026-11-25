@@ -1,5 +1,6 @@
 crewai>=1.15.42,<2.0
 gradio>=5.49,<7.0
+Pillow==11.3.0  # Avoid Colab Pillow _Ink import mismatch
 transformers>=4.56.0
 accelerate>=1.2.0
 pandas>=2.2.0
