@@ -391,7 +391,7 @@ with gr.Blocks(
     ),
     css=CSS,
 ) as demo:
-    with gr.Column(elem_id="studio-shell", equal_height=False):
+    with gr.Column(elem_id="studio-shell"):
         gr.HTML(
             f"""
             <div id="studio-topbar">
