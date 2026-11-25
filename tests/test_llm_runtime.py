@@ -1,6 +1,6 @@
 import pytest
 
-from studio.runtime import resolve_runtime_device
+from studio.runtime import resolve_cpu_threads, resolve_runtime_device
 
 
 def test_auto_prefers_cuda_when_available():
@@ -23,3 +23,17 @@ def test_explicit_cuda_requires_cuda():
 def test_invalid_device_is_rejected():
     with pytest.raises(ValueError, match="HF_DEVICE"):
         resolve_runtime_device("mps", cuda_available=True)
+
+
+def test_cpu_threads_default_to_available_count():
+    assert resolve_cpu_threads(None, available=8) == 8
+
+
+def test_cpu_threads_accept_positive_integer():
+    assert resolve_cpu_threads("4", available=8) == 4
+
+
+@pytest.mark.parametrize("value", ["0", "-2", "many"])
+def test_cpu_threads_reject_invalid_values(value):
+    with pytest.raises(ValueError, match="HF_CPU_THREADS"):
+        resolve_cpu_threads(value, available=8)
