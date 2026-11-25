@@ -629,7 +629,7 @@ with gr.Blocks(
                                 file_types=[".csv"],
                                 type="filepath",
                             )
-                            gr.Markdown('<div class="helper-note">No file? Leave this empty to use the bundled Retail Sales demo dataset. Maximum upload size: 25 MB.</div>')
+                            gr.Markdown('<div class="helper-note">No file? Leave this empty to use the bundled Retail Sales demo dataset. Limits: 25 MB · 250,000 rows · 250 columns. Column names must be non-empty and unique.</div>')
                             de_context = gr.Textbox(
                                 label="Business description",
                                 placeholder="Example: Retail sales by product, region and order date. Revenue is net sales in TND.",
