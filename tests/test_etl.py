@@ -179,3 +179,28 @@ def test_pipeline_rejects_empty_header(tmp_path, monkeypatch):
     source.write_text(",name\n,Ali\n", encoding="utf-8")
     with pytest.raises(ValueError, match="non-empty column names"):
         etl_module.run_csv_pipeline(source)
+
+
+
+def test_pipeline_rejects_oversized_column_name(tmp_path, monkeypatch):
+    workspace, _, _ = _configure_workspace(tmp_path, monkeypatch)
+    workspace.mkdir(parents=True, exist_ok=True)
+    source = workspace / "long_column.csv"
+    source.write_text("customer_name\nAlice\n", encoding="utf-8")
+    monkeypatch.setattr(etl_module, "MAX_COLUMN_NAME_CHARS", 8)
+    with pytest.raises(ValueError, match="must not exceed 8 characters"):
+        etl_module.run_csv_pipeline(source)
+
+
+def test_pipeline_truncates_sample_values_in_semantic_metadata(tmp_path, monkeypatch):
+    workspace, _, _ = _configure_workspace(tmp_path, monkeypatch)
+    workspace.mkdir(parents=True, exist_ok=True)
+    source = workspace / "long_sample.csv"
+    pd.DataFrame({"description": ["A long sample value beyond the configured cap"]}).to_csv(
+        source, index=False
+    )
+    monkeypatch.setattr(etl_module, "MAX_SAMPLE_VALUE_CHARS", 12)
+    report = etl_module.run_csv_pipeline(source)
+    sample = report["column_profile"]["description"]["sample_values"][0]
+    assert sample == "A long sampl…"
+    assert len(sample) == 13
