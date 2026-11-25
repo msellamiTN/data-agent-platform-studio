@@ -32,7 +32,7 @@ flowchart LR
 5. Run **01 · Data Engineering Agent** first.
 6. Then run **02 · Data Analysis Agent** against the active dataset.
 
-The notebook checks the actual runtime. CUDA is preferred when available; CPU-only inference uses FP32 and is slower, with higher RAM requirements. Set `HF_DEVICE=cpu` to force CPU or `HF_DEVICE=cuda` to require a GPU. The model is loaded lazily on its first agent execution.
+The notebook checks the actual runtime. CUDA is preferred when available; CPU-only inference uses FP32 and is slower, with higher RAM requirements. Set `HF_DEVICE=cpu` to force CPU or `HF_DEVICE=cuda` to require a GPU. The model is loaded lazily on its first agent execution. The install requirements pin Pillow 11.3.0 to avoid a known `_Ink` import mismatch in some Colab images; if Pillow was already imported before installation, restart the runtime before importing Gradio or CrewAI.
 
 ## Runtime and core stack
 
@@ -106,7 +106,7 @@ The agent must inspect the schema before generating SQL. It cannot query an assu
 - A SQLite authorizer blocks write and schema-changing operations.
 - Query output is capped at 100 rows.
 
-If the small local model does not complete its tool call, the application uses a clearly labeled deterministic preview/aggregation fallback.
+If the small local model does not complete its tool call, the application uses a clearly labeled Python fallback. The fallback supports only explicitly implemented schema-aware query patterns; a row preview is labeled as a preview and is never presented as an aggregate answer. Count questions generate `COUNT` / `COUNT(DISTINCT ...)` queries against a matching real column. The UI distinguishes successful CrewAI tool execution from deterministic ETL or SQL fallback.
 
 ## Functional patterns implemented locally
 
@@ -163,7 +163,7 @@ The Gradio interface uses a focused workspace layout rather than a notebook-styl
 
 - **Overview:** active pipeline monitor, Bronze/Silver/Gold lifecycle, dataset KPIs and the two-agent hand-off.
 - **Data Engineering:** source upload, optional business description, explicit quality controls, run summary, quality report, Silver preview and manifest.
-- **Data Analysis:** question-first interaction, suggested business questions, grounded answer, SQL disclosure and result table/visualization.
+- **Data Analysis:** question-first interaction, question ideas derived from the active dataset's real columns, answer, SQL disclosure and result table/visualization.
 - **Platform:** local execution stack and clear model/data safety boundaries.
 
 The visual system uses a restrained navy/blue/teal palette, clear typographic hierarchy, compact status chips, metric cards, progressive disclosure for technical details and responsive layouts for narrower screens. It remains a Gradio application and does not introduce an external UI service.
