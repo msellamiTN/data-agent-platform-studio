@@ -167,6 +167,15 @@ textarea, input, .file-preview, .wrap[data-testid="block-info"] {
 }
 .helper-note { color:#8290a0; font-size:10px; line-height:1.55; }
 #studio-footer { color:#8a97a7; font-size:10px; padding:7px 2px; border-top:1px solid #e6ebf1; }
+.context-banner {
+  display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+  border:1px solid #cfe8e1; border-radius:12px; background:#f3fbf8;
+  padding:11px 14px; margin:0 0 14px; color:#176d5f; font-size:11px;
+}
+.context-banner span { color:#58796f; font-size:10px; }
+.context-empty { background:#fbfcfe; border-color:#dbe3ec; color:#56677b; }
+.context-empty span { color:#7a8999; }
+.status-pill.warning .dot { background:#d99527; }
 .panel-title {
   color:var(--studio-ink); font-size:13px; font-weight:780; letter-spacing:-.2px;
   margin:0 0 13px; padding:0 0 10px; border-bottom:1px solid var(--studio-line);
@@ -232,6 +241,24 @@ def _read_pipeline() -> dict[str, Any] | None:
         return get_current_pipeline()
     except Exception:
         return None
+
+
+def _analysis_context_status(manifest: dict[str, Any] | None = None) -> str:
+    manifest = manifest if manifest is not None else _read_pipeline()
+    if not manifest:
+        return (
+            '<div class="context-banner context-empty"><b>No active Gold dataset</b>'
+            '<span>Run Data Engineering to prepare a dataset before analysis.</span></div>'
+        )
+    dataset = _escape(manifest.get("dataset", "Dataset"))
+    pipeline_id = _escape(manifest.get("pipeline_id", "—"))
+    rows = int(manifest.get("rows_after", 0))
+    return (
+        '<div class="context-banner">'
+        f'<b>Active dataset · {dataset}</b>'
+        f'<span>{rows:,} curated rows · pipeline {pipeline_id} · Gold.silver_data</span>'
+        '</div>'
+    )
 
 
 def _pipeline_dashboard(manifest: dict[str, Any] | None = None) -> str:
@@ -345,7 +372,6 @@ def _engineering_handler(
         removed = int(report.get("duplicates_removed", 0))
         is_fallback = result["execution_mode"] != "crewai_tool"
         orchestration = result.get("orchestration_status", "not_completed")
-        mode = "Deterministic Python ETL" if is_fallback else "CrewAI invoked fixed ETL tool"
         status_class = "warning" if is_fallback or orchestration != "completed" else ""
         status_label = "Python fallback used" if is_fallback else "CrewAI tool invoked"
         heading = "Pipeline artifacts published locally"
@@ -388,6 +414,12 @@ def _engineering_handler(
             manifest_view,
             _pipeline_dashboard(report),
             gr.update(choices=_suggested_questions(report.get("columns", [])), value=None),
+            _analysis_context_status(report),
+            gr.update(interactive=True),
+            "",
+            pd.DataFrame(),
+            None,
+            '<div class="empty-state">The active dataset changed. Ask a new question to generate results for this pipeline.</div>',
         )
     except Exception as exc:
         message = f"{type(exc).__name__}: {exc}"
@@ -399,6 +431,12 @@ def _engineering_handler(
             {"error": message},
             _pipeline_dashboard(),
             gr.update(choices=[], value=None),
+            _analysis_context_status(),
+            gr.update(interactive=bool(_read_pipeline())),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
         )
 
 
@@ -434,7 +472,6 @@ def _analysis_handler(question: str):
         answer = result["summary"]
         note = result.get("provider_note") or ""
         mode = result.get("execution_mode", "unknown")
-        is_fallback = mode != "crewai_tool"
         status_labels = {
             "crewai_tool": ("CrewAI read-only tool executed", ""),
             "validated_query_plan": ("Deterministic query plan verified", ""),
@@ -493,7 +530,7 @@ with gr.Blocks(
               <div class="topbar-right">
                 <span class="top-chip"><span class="dot"></span>Local model · {_escape(MODEL_ID.rsplit("/", 1)[-1])}</span>
                 <span class="top-chip">{runtime_label}</span>
-                <span class="top-chip">CrewAI orchestration</span>
+                <span class="top-chip">CrewAI · bounded Python tools</span>
               </div>
             </div>
             """
@@ -517,7 +554,7 @@ with gr.Blocks(
                 )
                 with gr.Row():
                     with gr.Column(scale=1):
-                        gr.HTML('<div class="section-kicker">Workspace at a glance</div><div class="section-heading">Pipeline overview</div><div class="section-sub">A live view of the active dataset prepared by the Engineering Agent.</div>')
+                        gr.HTML('<div class="section-kicker">Workspace at a glance</div><div class="section-heading">Pipeline overview</div><div class="section-sub">The active, versioned data product shared by both workspaces.</div>')
                     with gr.Column(scale=0, min_width=130):
                         refresh_overview = gr.Button("Refresh status", size="sm", variant="secondary")
                 overview_dashboard = gr.HTML(value=_pipeline_dashboard())
@@ -552,8 +589,8 @@ with gr.Blocks(
                     """
                     <div style="margin-bottom:18px">
                       <div class="section-kicker">Workspace 01 / Engineering</div>
-                      <div class="section-heading">Build your data pipeline</div>
-                      <div class="section-sub">Bring a source dataset, define its business meaning and publish a curated Gold table for downstream analysis.</div>
+                      <div class="section-heading">Prepare and publish trusted data</div>
+                      <div class="section-sub">Ingest a CSV, apply transparent quality rules, review the results and publish an immutable Gold run for downstream analysis.</div>
                     </div>
                     <div class="pipeline-flow" style="margin-bottom:18px">
                       <div class="flow-node"><div class="flow-index">01</div><div><div class="flow-label">Source</div><div class="flow-detail">Upload CSV</div></div></div>
@@ -602,11 +639,12 @@ with gr.Blocks(
                     """
                     <div style="margin-bottom:18px">
                       <div class="section-kicker">Workspace 02 / Analysis</div>
-                      <div class="section-heading">Ask your data anything</div>
-                      <div class="section-sub">The Analyst Agent reads the active Gold dataset. No second upload, no disconnected demo data.</div>
+                      <div class="section-heading">Explore your active dataset</div>
+                      <div class="section-sub">Ask questions against the exact Gold dataset published by Data Engineering. No second upload and no disconnected sample data.</div>
                     </div>
                     """
                 )
+                da_context_status = gr.HTML(value=_analysis_context_status())
                 with gr.Row(equal_height=False):
                     with gr.Column(scale=5, min_width=330):
                         with gr.Group(elem_id="analysis-question-panel"):
@@ -628,7 +666,12 @@ with gr.Blocks(
                                 inputs=[da_question_ideas],
                                 outputs=[da_question],
                             )
-                            da_run = gr.Button("Analyze dataset", variant="primary", size="lg")
+                            da_run = gr.Button(
+                                "Analyze dataset",
+                                variant="primary",
+                                size="lg",
+                                interactive=bool(_read_pipeline()),
+                            )
                         gr.HTML(
                             """
                             <div class="content-card" style="margin-top:12px">
@@ -689,7 +732,11 @@ with gr.Blocks(
         de_run.click(
             _engineering_handler,
             inputs=[de_file, de_trim, de_duplicates, de_empty, de_context],
-            outputs=[de_summary, de_report, de_download, de_preview, de_manifest, overview_dashboard, da_question_ideas],
+            outputs=[
+                de_summary, de_report, de_download, de_preview, de_manifest,
+                overview_dashboard, da_question_ideas, da_context_status, da_run,
+                da_sql, da_table, da_plot, da_summary,
+            ],
         )
 
         gr.HTML(
