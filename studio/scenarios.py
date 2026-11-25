@@ -207,10 +207,23 @@ def run_data_analysis(question: str) -> dict[str, Any]:
 
     payload = captured["sql_result"]
     dataframe = pd.DataFrame(payload["rows"], columns=payload["columns"])
-    if not crew_summary:
+    if execution_mode == "safe_preview_fallback":
+        if payload["rows"] and payload["columns"] and payload["columns"][0] in {"value_count", "distinct_count", "row_count"}:
+            value = payload["rows"][0][payload["columns"][0]]
+            target = "distinct values" if payload["columns"][0] == "distinct_count" else "non-null values"
+            if payload["columns"][0] == "row_count":
+                crew_summary = f"The active dataset contains {value} rows."
+            else:
+                crew_summary = f"The requested column contains {value} {target}."
+        else:
+            crew_summary = (
+                f"CrewAI did not complete. A safe preview returned {payload['row_count']} row(s); "
+                "this preview is not an aggregate answer to your question."
+            )
+    elif not crew_summary:
         crew_summary = (
-            f"Lecture seule sur le pipeline {manifest['pipeline_id']} : "
-            f"{payload['row_count']} ligne(s) retournée(s)."
+            f"Read-only query completed on pipeline {manifest['pipeline_id']}: "
+            f"{payload['row_count']} row(s) returned."
         )
 
     return {
