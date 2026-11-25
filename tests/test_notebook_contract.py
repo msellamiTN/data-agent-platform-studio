@@ -26,7 +26,7 @@ def test_colab_notebook_uses_isolated_venv_and_live_launcher():
     assert "git pull --ff-only origin feature/colab-crewai-dual-agent-studio" in all_source
     assert "requirements-colab.txt" in all_source
     assert '"--system-site-packages"' in all_source
-    assert '"uv", "pip", "install"' in all_source
+    assert 'uv_executable, "pip", "install"' in all_source
     assert ".venv/bin/python scripts/launch_colab.py" in all_source
     assert "run_runtime_acceptance(get_local_llm())" not in all_source
     assert "from transformers import AutoModelForCausalLM, AutoTokenizer" in all_source
