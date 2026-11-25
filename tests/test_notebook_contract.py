@@ -56,6 +56,7 @@ def test_colab_launcher_reuses_acceptance_model_for_gradio_app():
     assert source.index("run_runtime_acceptance(llm") < source.index("from app import demo")
     assert "demo.queue(default_concurrency_limit=1).launch(" in source
     assert "share=True" in source
+    assert "The isolated Colab Python cannot import Torch" in source
 
 
 def test_colab_bootstrap_avoids_ensurepip_and_verifies_base_torch_reuse():
