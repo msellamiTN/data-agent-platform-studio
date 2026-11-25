@@ -19,7 +19,7 @@ def _database(tmp_path, monkeypatch):
             [
                 ("North", 10.0, "A"),
                 ("South", 20.0, "B"),
-                ("South", 30.0, "B"),
+                ("South", 30.0, "A title that is longer than five characters"),
             ],
         )
         connection.execute("CREATE TABLE staging_upload(secret TEXT)")
@@ -109,3 +109,69 @@ def test_explicit_preview_plan_is_bounded():
 
 def test_unrecognised_question_does_not_claim_supported_intent():
     assert plan_supported_question("Compare categories by average revenue", ["category", "revenue"]) is None
+
+
+
+def test_constant_select_without_active_dataset_is_rejected(tmp_path, monkeypatch):
+    db_path = _database(tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match="must read from the active silver_data"):
+        execute_readonly_query(db_path, "SELECT 1")
+
+
+def test_result_rows_are_capped_at_configured_row_limit(tmp_path, monkeypatch):
+    db_path = _database(tmp_path, monkeypatch)
+    monkeypatch.setattr(sql_module, "MAX_SQL_ROWS", 2)
+    result = execute_readonly_query(db_path, "SELECT region FROM silver_data")
+    assert result["row_count"] == 2
+    assert result["truncated"] is True
+    assert "row_limit" in result["truncation_reasons"]
+
+
+def test_oversized_text_cells_are_truncated_and_reported(tmp_path, monkeypatch):
+    db_path = _database(tmp_path, monkeypatch)
+    monkeypatch.setattr(sql_module, "MAX_SQL_CELL_CHARS", 5)
+    result = execute_readonly_query(
+        db_path,
+        "SELECT title FROM silver_data ORDER BY revenue DESC",
+    )
+    assert result["rows"][0]["title"] == "A titl…"
+    assert result["truncated"] is True
+    assert result["truncated_cells"] >= 1
+    assert "cell_value_limit" in result["truncation_reasons"]
+
+
+def test_result_payload_obeys_byte_budget(tmp_path, monkeypatch):
+    db_path = _database(tmp_path, monkeypatch)
+    monkeypatch.setattr(sql_module, "MAX_SQL_CELL_CHARS", 16)
+    monkeypatch.setattr(sql_module, "MAX_SQL_RESULT_BYTES", 80)
+    result = execute_readonly_query(db_path, "SELECT region, title FROM silver_data")
+    assert result["result_bytes"] <= 80
+    assert result["truncated"] is True
+    assert "result_byte_limit" in result["truncation_reasons"]
+
+
+def test_blob_values_are_json_safe_and_omitted_from_payload(tmp_path, monkeypatch):
+    db_path = _database(tmp_path, monkeypatch)
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("ALTER TABLE silver_data ADD COLUMN payload BLOB")
+        connection.execute(
+            "UPDATE silver_data SET payload = ? WHERE region = 'North'",
+            (sqlite3.Binary(b"sample-binary-data"),),
+        )
+    result = execute_readonly_query(
+        db_path,
+        "SELECT payload FROM silver_data WHERE region = 'North'",
+    )
+    assert result["rows"][0]["payload"] == "[binary value omitted: 17 bytes]"
+    assert result["truncated"] is True
+    import json
+    json.dumps(result, ensure_ascii=False, allow_nan=False)
+
+
+def test_unsafe_sql_functions_are_denied(tmp_path, monkeypatch):
+    db_path = _database(tmp_path, monkeypatch)
+    with pytest.raises(sqlite3.DatabaseError):
+        execute_readonly_query(
+            db_path,
+            "SELECT load_extension('extension.so') FROM silver_data LIMIT 1",
+        )
