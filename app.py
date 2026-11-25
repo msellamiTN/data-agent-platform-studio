@@ -518,6 +518,14 @@ def _analysis_handler(question: str):
   <div class="helper-note" style="margin-top:12px">{_escape(note)} · Execution: {_escape(mode)}</div>
 </div>
 """
+        if result.get("truncated"):
+            reasons = ", ".join(result.get("truncation_reasons", [])) or "configured result limits"
+            summary += (
+                '<div class="helper-note" style="margin-top:8px;color:#9c6716">'
+                f"Result truncated by { _escape(reasons) }. "
+                "The displayed rows or cell values are incomplete; inspect the query or narrow the question."
+                '</div>'
+            )
         if result.get("crew_error"):
             summary += f'<div class="helper-note" style="margin-top:8px">Agent note: {_escape(result["crew_error"])}</div>'
         return result.get("sql", ""), frame, figure, summary
