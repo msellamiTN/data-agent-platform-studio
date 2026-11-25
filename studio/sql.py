@@ -107,6 +107,8 @@ def execute_readonly_query(database_path: str | Path, sql: str) -> dict[str, Any
         allowed_actions.add(recursive_action)
     blocked_functions = {"load_extension", "readfile", "writefile", "fts3_tokenizer"}
 
+    active_table_read = False
+
     def authorizer(
         action: int,
         arg1: str | None,
@@ -114,11 +116,14 @@ def execute_readonly_query(database_path: str | Path, sql: str) -> dict[str, Any
         database: str | None,
         trigger: str | None,
     ) -> int:
+        nonlocal active_table_read
         del database, trigger
         if action not in allowed_actions:
             return sqlite3.SQLITE_DENY
-        if action == sqlite3.SQLITE_READ and arg1 != "silver_data":
-            return sqlite3.SQLITE_DENY
+        if action == sqlite3.SQLITE_READ:
+            if arg1 != "silver_data":
+                return sqlite3.SQLITE_DENY
+            active_table_read = True
         if action == sqlite3.SQLITE_FUNCTION:
             function_name = (arg2 or arg1 or "").casefold()
             if function_name in blocked_functions:
@@ -148,6 +153,8 @@ def execute_readonly_query(database_path: str | Path, sql: str) -> dict[str, Any
         connection.set_authorizer(authorizer)
         connection.set_progress_handler(interrupt_if_over_budget, 1000)
         cursor = connection.execute(statement)
+        if not active_table_read:
+            raise ValueError("Query must read from the active silver_data table.")
         columns = [str(item[0])[:MAX_SQL_CELL_CHARS] for item in (cursor.description or [])]
         fetched_rows = cursor.fetchmany(MAX_SQL_ROWS + 1)
         row_limit_truncated = len(fetched_rows) > MAX_SQL_ROWS
