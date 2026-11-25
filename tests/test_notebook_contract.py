@@ -25,8 +25,7 @@ def test_colab_notebook_uses_isolated_venv_and_live_launcher():
 
     assert "git pull --ff-only origin feature/colab-crewai-dual-agent-studio" in all_source
     assert "requirements-colab.txt" in all_source
-    assert '"--system-site-packages"' in all_source
-    assert 'uv_executable, "pip", "install"' in all_source
+    assert "scripts/bootstrap_colab.py" in all_source
     assert ".venv/bin/python scripts/launch_colab.py" in all_source
     assert "run_runtime_acceptance(get_local_llm())" not in all_source
     assert "from transformers import AutoModelForCausalLM, AutoTokenizer" in all_source
@@ -61,3 +60,16 @@ def test_colab_launcher_reuses_acceptance_model_for_gradio_app():
     assert source.index("run_runtime_acceptance(llm") < source.index("from app import demo")
     assert "demo.queue(default_concurrency_limit=1).launch(" in source
     assert "share=True" in source
+
+
+def test_colab_bootstrap_isolates_studio_and_reuses_base_torch():
+    source = (ROOT / "scripts" / "bootstrap_colab.py").read_text(encoding="utf-8")
+    assert '"--system-site-packages"' in source
+    assert '"--no-deps"' in source
+    assert '"--python"' in source
+    assert '"requirements-colab.txt"' in source
+    assert 'Path(torch.__file__).resolve()' in source
+    assert 'Path(__import__("os").environ["DATA2AI_COLAB_TORCH_FILE"]).resolve()' in source
+    assert '"model_api_imports": "passed"' in source
+    assert "pip check" not in source
+    assert "requirements-colab-runtime.txt" not in source
