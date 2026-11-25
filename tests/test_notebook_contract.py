@@ -20,6 +20,7 @@ def test_colab_notebook_uses_colab_dependency_profile_and_smoke_checks_imports()
     sources = _sources(notebook_path)
     all_source = "\n".join(sources)
 
+    assert "git pull --ff-only origin feature/colab-crewai-dual-agent-studio" in all_source
     assert "requirements-colab.txt" in all_source
     assert "pip check" in all_source
     assert "from PIL import" in all_source
