@@ -30,6 +30,7 @@ def test_colab_notebook_uses_colab_dependency_profile_and_smoke_checks_imports()
     assert "HF_DEVICE" in all_source
     assert "run_runtime_acceptance(get_local_llm())" in all_source
     assert "pip install torch" not in all_source.casefold()
+    assert "from transformers.utils import download_url" in all_source
 
 
 def test_colab_dependency_profile_does_not_override_torch():
@@ -42,3 +43,6 @@ def test_colab_dependency_profile_does_not_override_torch():
     assert "torch" not in core_requirements.casefold()
     assert "-r requirements-core.txt" in full_requirements
     assert "torch>=" in full_requirements
+    assert "transformers==4.57.6" in core_requirements
+    assert "huggingface-hub==0.36.2" in core_requirements
+    assert "transformers>=4.56,<5.0" not in core_requirements
