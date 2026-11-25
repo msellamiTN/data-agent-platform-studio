@@ -294,11 +294,21 @@ def _engineering_handler(
 """
         if result.get("crew_error"):
             summary += f'<div class="helper-note" style="margin-top:8px">CrewAI note: {_escape(result["crew_error"])}</div>'
+        manifest_view = {
+            "pipeline_id": report.get("pipeline_id"),
+            "status": report.get("status"),
+            "dataset": report.get("dataset"),
+            "layers": report.get("layers"),
+            "database": report.get("database"),
+            "analysis_table": report.get("analysis_table"),
+            "created_at": report.get("created_at"),
+        }
         return (
             summary,
             report,
             result["cleaned_file"],
             result["preview"],
+            manifest_view,
             _pipeline_dashboard(report),
         )
     except Exception as exc:
@@ -308,6 +318,7 @@ def _engineering_handler(
             {"error": message},
             None,
             pd.DataFrame(),
+            {"error": message},
             _pipeline_dashboard(),
         )
 
@@ -498,7 +509,7 @@ with gr.Blocks(
                 de_run.click(
                     _engineering_handler,
                     inputs=[de_file, de_trim, de_duplicates, de_empty, de_context],
-                    outputs=[de_summary, de_report, de_download, de_preview, de_manifest],
+                    outputs=[de_summary, de_report, de_download, de_preview, de_manifest, overview_dashboard],
                 )
 
             with gr.Tab("Data Analysis", id="analysis"):
