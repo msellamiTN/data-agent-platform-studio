@@ -37,7 +37,7 @@ The notebook then executes `scripts/launch_colab.py` with the explicit `.venv/bi
 
 The previous notebook attempted to call `google.colab.runtime.restart_runtime()`, which does not exist. The new notebook does not call this method. It also does not run `python -m venv`; use the repository's `uv` bootstrap instead.
 
-Open the updated notebook and run all cells from the top. Cell 1 fetches the latest branch. Cell 2 must show `DATA2AI COLAB BOOTSTRAP PASSED` before continuing. The bootstrap must report a venv Python path and the exact base Torch file. Cell 6 launches using the explicit venv interpreter. The old kernel's imported Transformers modules do not affect the isolated launch process.
+Close any old Colab tab and reopen the notebook from the repository link. Pulling the branch inside an already-open notebook updates files on disk, but does not replace the code cells already loaded in the browser. Run all cells from the reopened notebook. Cell 1 fetches the latest branch. Cell 2 prints `Data2AI Colab bootstrap: uv-based, ensurepip-free` and must then show `DATA2AI COLAB BOOTSTRAP PASSED` before continuing. The bootstrap must report a venv Python path and the exact base Torch file. Cell 6 launches using the explicit venv interpreter. The old kernel's imported Transformers modules do not affect the isolated launch process.
 
 ## Acceptance boundary
 
