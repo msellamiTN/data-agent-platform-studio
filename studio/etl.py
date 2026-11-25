@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import shutil
 import sqlite3
 import uuid
@@ -14,6 +16,7 @@ from .config import (
     CURRENT_PIPELINE_DIR,
     MAX_UPLOAD_BYTES,
     PIPELINE_MANIFEST,
+    PIPELINE_ROOT,
     WORKSPACE_DIR,
 )
 
@@ -32,6 +35,28 @@ def _workspace_file(path: str | Path) -> Path:
     return candidate
 
 
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _atomic_json_write(path: Path, payload: dict[str, Any]) -> None:
+    """Publish JSON by atomic replacement so readers never observe partial data."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8") as target:
+            json.dump(payload, target, ensure_ascii=False, indent=2, default=str)
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def run_csv_pipeline(
     csv_path: str | Path,
     trim_text: bool = True,
@@ -39,12 +64,19 @@ def run_csv_pipeline(
     drop_empty_rows: bool = True,
     business_context: str = "",
 ) -> dict[str, Any]:
-    """Run one shared Bronze → Silver → Gold pipeline for both agent scenarios."""
+    """Create an immutable run and atomically publish it as the active pipeline.
 
+    All artifacts are written under pipeline/runs/<pipeline_id>. Only after the
+    Bronze, Silver, Gold and metadata artifacts are complete is the active
+    manifest replaced. In-flight readers therefore keep using their run's
+    immutable SQLite database while a later run is being prepared.
+    """
     source = _workspace_file(csv_path)
     frame = pd.read_csv(source)
     if frame.empty:
         raise ValueError("The uploaded CSV contains no data rows.")
+    if len(frame.columns) == 0:
+        raise ValueError("The uploaded CSV must contain at least one column.")
 
     rows_before = len(frame)
     duplicates_before = int(frame.duplicated().sum())
@@ -69,7 +101,8 @@ def run_csv_pipeline(
     if frame.empty:
         raise ValueError("All rows were removed by the selected cleaning rules.")
 
-    # Lightweight metadata is the shared context contract for the analysis agent.
+    # The profile is a compact shared contract, not a substitute for a governed
+    # business glossary. Classification is intentionally heuristic.
     column_profile: dict[str, Any] = {}
     dimensions: list[str] = []
     measures: list[str] = []
@@ -104,69 +137,79 @@ def run_csv_pipeline(
         "measures": measures,
         "date_columns": date_columns,
         "business_context": business_context.strip(),
+        "classification_note": "Heuristic candidates inferred from column names and pandas dtypes; validate before business-critical use.",
     }
 
-    # The single active pipeline is the shared hand-off contract to every agent.
     pipeline_id = uuid.uuid4().hex[:12]
-    bronze_dir = CURRENT_PIPELINE_DIR / "bronze"
-    silver_dir = CURRENT_PIPELINE_DIR / "silver"
-    gold_dir = CURRENT_PIPELINE_DIR / "gold"
-    metadata_dir = CURRENT_PIPELINE_DIR / "metadata"
+    run_dir = PIPELINE_ROOT / "runs" / pipeline_id
+    bronze_dir = run_dir / "bronze"
+    silver_dir = run_dir / "silver"
+    gold_dir = run_dir / "gold"
+    metadata_dir = run_dir / "metadata"
     for directory in (bronze_dir, silver_dir, gold_dir, metadata_dir):
-        directory.mkdir(parents=True, exist_ok=True)
+        directory.mkdir(parents=True, exist_ok=False)
 
     bronze_file = bronze_dir / "source.csv"
     silver_file = silver_dir / "cleaned.csv"
     database_path = gold_dir / "warehouse.sqlite"
     report_path = metadata_dir / "quality_report.json"
+    run_manifest_path = run_dir / "manifest.json"
 
-    shutil.copy2(source, bronze_file)
-    frame.to_csv(silver_file, index=False)
+    try:
+        shutil.copy2(source, bronze_file)
+        frame.to_csv(silver_file, index=False)
 
-    with sqlite3.connect(database_path) as connection:
-        frame.to_sql("silver_data", connection, if_exists="replace", index=False)
-        # Stable alias for agents and examples that expect a staging table.
-        frame.to_sql("staging_upload", connection, if_exists="replace", index=False)
+        # A unique, run-scoped database avoids replacement races with readers.
+        with sqlite3.connect(database_path) as connection:
+            frame.to_sql("silver_data", connection, if_exists="fail", index=False)
+            frame.to_sql("staging_upload", connection, if_exists="fail", index=False)
 
-    report = {
-        "pipeline_id": pipeline_id,
-        "status": "READY",
-        "dataset": source.stem,
-        "source_file": source.name,
-        "rows_before": rows_before,
-        "rows_after": len(frame),
-        "duplicates_detected_before_cleaning": duplicates_before,
-        "duplicates_removed": duplicates_removed,
-        "nulls_before": nulls_before,
-        "nulls_after": {str(k): int(v) for k, v in frame.isna().sum().items()},
-        "columns": [str(column) for column in frame.columns],
-        "column_profile": column_profile,
-        "semantic_catalog": semantic_catalog,
-        "business_context": business_context.strip(),
-        "layers": {
-            "bronze": str(bronze_file),
-            "silver": str(silver_file),
-            "gold_database": str(database_path),
-            "gold_table": "silver_data",
-        },
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    report_path.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    manifest = {
-        **report,
-        "database": str(database_path),
-        "analysis_table": "silver_data",
-        "cleaned_csv": str(silver_file),
-        "quality_report": str(report_path),
-    }
-    PIPELINE_MANIFEST.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    return manifest
+        report = {
+            "pipeline_id": pipeline_id,
+            "status": "READY",
+            "dataset": source.stem,
+            "source_file": source.name,
+            "source_sha256": _sha256(bronze_file),
+            "silver_sha256": _sha256(silver_file),
+            "gold_sha256": _sha256(database_path),
+            "rows_before": rows_before,
+            "rows_after": len(frame),
+            "duplicates_detected_before_cleaning": duplicates_before,
+            "duplicates_removed": duplicates_removed,
+            "nulls_before": nulls_before,
+            "nulls_after": {str(k): int(v) for k, v in frame.isna().sum().items()},
+            "columns": [str(column) for column in frame.columns],
+            "column_profile": column_profile,
+            "semantic_catalog": semantic_catalog,
+            "business_context": business_context.strip(),
+            "layers": {
+                "bronze": str(bronze_file),
+                "silver": str(silver_file),
+                "gold_database": str(database_path),
+                "gold_table": "silver_data",
+            },
+            "run_dir": str(run_dir),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        _atomic_json_write(report_path, report)
+        manifest = {
+            **report,
+            "database": str(database_path),
+            "analysis_table": "silver_data",
+            "cleaned_csv": str(silver_file),
+            "quality_report": str(report_path),
+            "manifest_path": str(run_manifest_path),
+        }
+        _atomic_json_write(run_manifest_path, manifest)
+
+        # This small pointer manifest is the only mutable part of the contract.
+        # Atomic replacement preserves the previous active run until this point.
+        _atomic_json_write(PIPELINE_MANIFEST, manifest)
+        return manifest
+    except Exception:
+        # Keep failed artifacts out of the active manifest. The incomplete run
+        # is retained for diagnostics and can be removed by an explicit cleanup.
+        raise
 
 
 def copy_upload_to_workspace(upload_path: str | Path, run_dir: Path) -> Path:
