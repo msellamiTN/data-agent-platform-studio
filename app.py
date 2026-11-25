@@ -554,12 +554,6 @@ with gr.Blocks(
                         with gr.Accordion("Active pipeline manifest", open=False):
                             de_manifest = gr.JSON(label="Bronze / Silver / Gold lineage")
 
-                de_run.click(
-                    _engineering_handler,
-                    inputs=[de_file, de_trim, de_duplicates, de_empty, de_context],
-                    outputs=[de_summary, de_report, de_download, de_preview, de_manifest, overview_dashboard, da_question_ideas],
-                )
-
             with gr.Tab("Data Analysis", id="analysis"):
                 gr.HTML(
                     """
@@ -648,6 +642,12 @@ with gr.Blocks(
                     </div>
                     """
                 )
+
+        de_run.click(
+            _engineering_handler,
+            inputs=[de_file, de_trim, de_duplicates, de_empty, de_context],
+            outputs=[de_summary, de_report, de_download, de_preview, de_manifest, overview_dashboard, da_question_ideas],
+        )
 
         gr.HTML(
             """
