@@ -64,7 +64,7 @@ def test_colab_bootstrap_avoids_ensurepip_and_verifies_base_torch_reuse():
     assert '"--python"' in source
     assert 'config_text = config.read_text' not in source
     assert "include-system-site-packages = true" in source
-    assert "ensurepip" not in source
+    assert '"-m", "venv"' not in source
     assert "venv_sees_torch(torch_file)" in source
     assert "Path(torch.__file__).resolve()" in source
     assert '"DATA2AI_COLAB_TORCH_FILE"' in source
