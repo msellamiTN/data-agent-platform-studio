@@ -2,12 +2,14 @@
 
 ## Supported compatibility set
 
-The Colab and local profiles intentionally use:
+The Colab and local profiles use this tested dependency target:
 
-- `transformers==4.57.6`
-- `huggingface-hub==0.36.2`
+- `transformers==5.24.1`
+- `huggingface-hub==1.32.0`
 
-Transformers 4.x declares a Hub 0.x dependency range. Transformers 5.x moves to the Hub 1.x line and removes some legacy utility exports. The application currently targets the Transformers 4.x API.
+Transformers 5.24.1 requires Hugging Face Hub 1.31 or later and below 3.0. The installed Colab `diffusers==0.42.1` requires Hub 1.32.0 or later and below 3.0. Hub 1.32.0 satisfies both requirements. The Studio now uses the Transformers 5 `dtype=` model-loading argument and requires PyTorch 2.6 or later.
+
+The previous pin `huggingface-hub==0.36.2` was incompatible with the current Colab Diffusers installation. Do not restore it for this runtime.
 
 ## Why `download_url` may fail
 
@@ -17,31 +19,37 @@ The error:
 ImportError: cannot import name 'download_url' from 'transformers.utils'
 ```
 
-is commonly produced by a dependent package that still imports that legacy symbol. The EasyDeL bridge, for example, imports `download_url` from `transformers.utils`. The symbol is exported by Transformers 4.57.6, but must not be assumed to exist in Transformers 5.x.
+is associated with dependent code that still imports this legacy symbol. EasyDeL contains such an import. The Data Agent Platform Studio does not use EasyDeL and does not need the `download_url` helper. The Studio now uses the public `AutoTokenizer` and `AutoModelForCausalLM` interfaces instead; the notebook does not test or import the removed legacy helper.
 
-The Data Agent Platform Studio does not use EasyDeL. Its local inference path is PyTorch + Transformers + CrewAI. Do not install or upgrade Transformers/Hugging Face Hub independently with unconstrained `-U` commands: that can override the project's selected compatibility set.
+Do not add EasyDeL to this environment unless a separate feature requires it and its compatibility with the selected Transformers release has been verified.
+
+## Colab package conflicts
+
+The Colab dependency profile explicitly reconciles the conflicts reported in the runtime log:
+
+- `huggingface-hub==1.32.0`: satisfies Diffusers 0.42.1 and Transformers 5.24.1.
+- `numpy<2.5`: satisfies Numba 0.64.0.
+- `jedi>=0.16`: satisfies the installed IPython 7.34.0 requirement.
+- `opentelemetry-api==1.42.1` and `opentelemetry-sdk==1.42.1`: satisfy Google ADK 2.7.1.
+- `rich>=12.4.4,<14`: satisfies BigFrames 2.51.0.
+- `fsspec==2025.12.0`: satisfies GCSFS 2025.12.0 and Datasets' upper bound.
+- `oauthlib>=3.2.0,<4`: satisfies Tweepy 4.17.0.
+
+These additional constraints live in `requirements-colab-runtime.txt`; they are not imposed on ordinary local installations.
 
 ## Clean Colab recovery
 
-Run this in a fresh Colab runtime, before importing Transformers, CrewAI, EasyDeL, or the Studio:
+The notebook checks whether any package whose files it will replace has already been imported. If so, it stops before installing anything and tells you to use **Runtime → Restart session**. This avoids mixing package files on disk with stale modules already loaded in memory.
 
-```python
-import sys
-import subprocess
+For the runtime shown in the error report:
 
-subprocess.check_call([
-    sys.executable, "-m", "pip", "install",
-    "--no-cache-dir", "--force-reinstall",
-    "transformers==4.57.6",
-    "huggingface-hub==0.36.2",
-])
-subprocess.check_call([sys.executable, "-m", "pip", "check"])
-```
+1. Select **Runtime → Restart session** in Colab.
+2. Reopen the notebook from the repository branch and run all cells from the top.
+3. The notebook installs `requirements-colab.txt`, runs `pip check`, then imports Transformers' public tokenizer/model classes.
+4. Confirm the dependency smoke-check prints Transformers 5.24.1 and Hub 1.32.0 before continuing to the live model/CrewAI acceptance cell.
 
-Then restart the runtime. Re-run the notebook from the beginning. Its dependency preflight explicitly imports `download_url` and both package versions, so an incompatible runtime fails before the Studio launches.
-
-For this Studio, avoid importing EasyDeL unless another task explicitly requires it. If EasyDeL is required in a separate notebook, install it in a separate environment or validate its declared Transformers compatibility before combining the stacks.
+The notebook does not call `google.colab.runtime.restart_runtime()`; that method is not available in the Colab runtime module. Kernel restart is an explicit user action so package installation is not silently interrupted.
 
 ## Acceptance boundary
 
-A successful import preflight proves the package API is available. It does not prove model download, tokenizer/model loading, GPU allocation, generation, or CrewAI tool execution. Those are checked separately by the live runtime acceptance cell.
+A successful package/import preflight proves that the pinned libraries and public APIs can be imported. It does not prove model download, tokenizer/model loading, GPU allocation, generation, or CrewAI tool execution. Those are checked separately by the live runtime acceptance cell.
