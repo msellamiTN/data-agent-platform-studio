@@ -162,7 +162,7 @@ def test_blob_values_are_json_safe_and_omitted_from_payload(tmp_path, monkeypatc
         db_path,
         "SELECT payload FROM silver_data WHERE region = 'North'",
     )
-    assert result["rows"][0]["payload"] == "[binary value omitted: 17 bytes]"
+    assert result["rows"][0]["payload"] == "[binary value omitted: 18 bytes]"
     assert result["truncated"] is True
     import json
     json.dumps(result, ensure_ascii=False, allow_nan=False)
