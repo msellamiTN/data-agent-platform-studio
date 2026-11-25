@@ -67,3 +67,21 @@ def test_positive_float_setting_accepts_decimal_value():
 def test_positive_float_setting_rejects_invalid_value(value):
     with pytest.raises(ValueError, match="MAX_SQL_EXECUTION_SECONDS"):
         positive_float_setting(value, "MAX_SQL_EXECUTION_SECONDS", 5.0)
+
+
+
+def test_prompt_token_count_accepts_exact_limit():
+    from studio.runtime import validate_prompt_token_count
+    validate_prompt_token_count(8192, 8192)
+
+
+def test_prompt_token_count_rejects_oversized_prompt():
+    from studio.runtime import validate_prompt_token_count
+    with pytest.raises(ValueError, match="configured limit is 8,192"):
+        validate_prompt_token_count(8193, 8192)
+
+
+def test_prompt_token_count_rejects_invalid_limit():
+    from studio.runtime import validate_prompt_token_count
+    with pytest.raises(ValueError, match="MAX_INPUT_TOKENS"):
+        validate_prompt_token_count(1, 0)
