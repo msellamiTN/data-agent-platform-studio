@@ -12,6 +12,8 @@ SAMPLE_SALES_CSV = DATA_DIR / "sales_demo.csv"
 # One local model shared by both CrewAI agents.
 MODEL_ID = os.getenv("HF_MODEL_ID", "Qwen/Qwen2.5-1.5B-Instruct")
 MAX_NEW_TOKENS = int(os.getenv("HF_MAX_NEW_TOKENS", "384"))
+RUNTIME_DEVICE = os.getenv("HF_DEVICE", "auto").strip().lower()
+CPU_THREADS = max(1, int(os.getenv("HF_CPU_THREADS", str(max(1, os.cpu_count() or 1)))))
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_MB", "25")) * 1024 * 1024
 MAX_SQL_ROWS = 100
 
