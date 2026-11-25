@@ -9,18 +9,7 @@ from pydantic import PrivateAttr
 from crewai import BaseLLM
 
 from .config import MAX_NEW_TOKENS, MODEL_ID
-
-
-def resolve_device(requested: str | None = None) -> str:
-    """Resolve auto/cpu/cuda without silently ignoring an explicit CUDA request."""
-    choice = (requested or os.getenv("HF_DEVICE", "auto")).strip().lower()
-    if choice not in {"auto", "cpu", "cuda"}:
-        raise ValueError("HF_DEVICE must be one of: auto, cpu, cuda.")
-    if choice == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("HF_DEVICE=cuda was requested, but CUDA is not available.")
-    if choice == "auto":
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    return choice
+from .runtime import resolve_runtime_device
 
 
 class HuggingFaceLocalLLM(BaseLLM):
@@ -44,7 +33,7 @@ class HuggingFaceLocalLLM(BaseLLM):
     ) -> None:
         super().__init__(model=model_id, temperature=temperature)
         self._max_new_tokens = max_new_tokens
-        self._device = resolve_device(device)
+        self._device = resolve_runtime_device(device or os.getenv("HF_DEVICE", "auto"), torch.cuda.is_available())
 
     @property
     def runtime_device(self) -> str:
