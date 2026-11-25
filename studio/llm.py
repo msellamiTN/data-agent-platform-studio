@@ -8,8 +8,12 @@ import torch
 from pydantic import PrivateAttr
 from crewai import BaseLLM
 
-from .config import MAX_NEW_TOKENS, MODEL_ID
-from .runtime import resolve_cpu_threads, resolve_runtime_device
+from .config import MAX_INPUT_TOKENS, MAX_NEW_TOKENS, MODEL_ID
+from .runtime import (
+    resolve_cpu_threads,
+    resolve_runtime_device,
+    validate_prompt_token_count,
+)
 
 
 class HuggingFaceLocalLLM(BaseLLM):
@@ -29,10 +33,12 @@ class HuggingFaceLocalLLM(BaseLLM):
         model_id: str = MODEL_ID,
         temperature: float = 0.0,
         max_new_tokens: int = MAX_NEW_TOKENS,
+        max_input_tokens: int = MAX_INPUT_TOKENS,
         device: str | None = None,
     ) -> None:
         super().__init__(model=model_id, temperature=temperature)
         self._max_new_tokens = max_new_tokens
+        self._max_input_tokens = max_input_tokens
         self._device = resolve_runtime_device(device or os.getenv("HF_DEVICE", "auto"), torch.cuda.is_available())
 
     @property
@@ -118,7 +124,9 @@ class HuggingFaceLocalLLM(BaseLLM):
                 f"{item['role'].upper()}: {item['content']}" for item in chat
             ) + "\nASSISTANT:"
 
-        encoded = self._tokenizer(prompt, return_tensors="pt")
+        encoded = self._tokenizer(prompt, return_tensors="pt", truncation=False)
+        prompt_tokens = int(encoded["input_ids"].shape[1])
+        validate_prompt_token_count(prompt_tokens, self._max_input_tokens)
         model_device = next(self._hf_model.parameters()).device
         encoded = {key: value.to(model_device) for key, value in encoded.items()}
         with torch.inference_mode():
