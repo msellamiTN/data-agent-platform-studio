@@ -155,31 +155,51 @@ def execute_readonly_query(database_path: str | Path, sql: str) -> dict[str, Any
         cursor = connection.execute(statement)
         if not active_table_read:
             raise ValueError("Query must read from the active silver_data table.")
-        columns = [str(item[0])[:MAX_SQL_CELL_CHARS] for item in (cursor.description or [])]
-        fetched_rows = cursor.fetchmany(MAX_SQL_ROWS + 1)
-        row_limit_truncated = len(fetched_rows) > MAX_SQL_ROWS
-        fetched_rows = fetched_rows[:MAX_SQL_ROWS]
-
+        columns = [
+            str(item[0])[:128]
+            for item in (cursor.description or [])
+        ]
         serialised: list[dict[str, Any]] = []
         response_bytes = len(
             json.dumps(columns, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         )
+        if response_bytes > MAX_SQL_RESULT_BYTES:
+            raise ValueError(
+                "SQL result column metadata exceeds the configured response-byte budget."
+            )
+
         truncated_cells = 0
+        row_limit_truncated = False
         byte_limit_truncated = False
-        for row in fetched_rows:
+        fetched_count = 0
+        while fetched_count < MAX_SQL_ROWS:
+            row = cursor.fetchone()
+            if row is None:
+                break
+            fetched_count += 1
             safe_row: dict[str, Any] = {}
+            row_truncated_cells = 0
             for column, value in zip(columns, row):
                 safe_value, was_truncated = normalise_cell(value)
                 safe_row[column] = safe_value
-                truncated_cells += int(was_truncated)
+                row_truncated_cells += int(was_truncated)
             row_bytes = len(
-                json.dumps(safe_row, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+                json.dumps(
+                    safe_row,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode("utf-8")
             )
             if response_bytes + row_bytes > MAX_SQL_RESULT_BYTES:
                 byte_limit_truncated = True
                 break
             serialised.append(safe_row)
             response_bytes += row_bytes
+            truncated_cells += row_truncated_cells
+
+        if not byte_limit_truncated and fetched_count == MAX_SQL_ROWS:
+            row_limit_truncated = cursor.fetchone() is not None
 
         truncated = row_limit_truncated or byte_limit_truncated or truncated_cells > 0
         reasons = []
