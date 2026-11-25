@@ -21,6 +21,12 @@ MAX_UPLOAD_MB = positive_int_setting(os.getenv("MAX_UPLOAD_MB"), "MAX_UPLOAD_MB"
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 MAX_DATA_ROWS = positive_int_setting(os.getenv("MAX_DATA_ROWS"), "MAX_DATA_ROWS", 250_000)
 MAX_DATA_COLUMNS = positive_int_setting(os.getenv("MAX_DATA_COLUMNS"), "MAX_DATA_COLUMNS", 250)
+MAX_COLUMN_NAME_CHARS = positive_int_setting(
+    os.getenv("MAX_COLUMN_NAME_CHARS"), "MAX_COLUMN_NAME_CHARS", 128
+)
+MAX_SAMPLE_VALUE_CHARS = positive_int_setting(
+    os.getenv("MAX_SAMPLE_VALUE_CHARS"), "MAX_SAMPLE_VALUE_CHARS", 160
+)
 MAX_BUSINESS_CONTEXT_CHARS = positive_int_setting(
     os.getenv("MAX_BUSINESS_CONTEXT_CHARS"), "MAX_BUSINESS_CONTEXT_CHARS", 4_000
 )
