@@ -134,7 +134,7 @@ def test_oversized_text_cells_are_truncated_and_reported(tmp_path, monkeypatch):
         db_path,
         "SELECT title FROM silver_data ORDER BY revenue DESC",
     )
-    assert result["rows"][0]["title"] == "A titl…"
+    assert result["rows"][0]["title"] == "A tit…"
     assert result["truncated"] is True
     assert result["truncated_cells"] >= 1
     assert "cell_value_limit" in result["truncation_reasons"]
