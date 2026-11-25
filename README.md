@@ -157,6 +157,19 @@ Open `http://localhost:7860`. To create a temporary Gradio share URL from a trus
 └── requirements-dev.txt
 ~~~
 
+## Professional Studio UX
+
+The Gradio interface uses a focused workspace layout rather than a notebook-style form:
+
+- **Overview:** active pipeline monitor, Bronze/Silver/Gold lifecycle, dataset KPIs and the two-agent hand-off.
+- **Data Engineering:** source upload, optional business description, explicit quality controls, run summary, quality report, Silver preview and manifest.
+- **Data Analysis:** question-first interaction, suggested business questions, grounded answer, SQL disclosure and result table/visualization.
+- **Platform:** local execution stack and clear model/data safety boundaries.
+
+The visual system uses a restrained navy/blue/teal palette, clear typographic hierarchy, compact status chips, metric cards, progressive disclosure for technical details and responsive layouts for narrower screens. It remains a Gradio application and does not introduce an external UI service.
+
+See [the UX design specification](docs/UX-DESIGN.md) for the layout and interaction principles.
+
 ## Tests
 
 ~~~bash
