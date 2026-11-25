@@ -24,7 +24,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
       - name: Install test dependencies
-        run: python -m pip install --upgrade pandas pytest python-dotenv
+        run: python -m pip install --upgrade pandas pytest python-dotenv -r requirements-hf-compat.txt
+      - name: Verify pinned Transformers Hub API
+        run: python -c "import transformers, huggingface_hub; from transformers.utils import download_url; assert transformers.__version__ == '4.57.6'; assert huggingface_hub.__version__ == '0.36.2'; assert callable(download_url); print('Transformers', transformers.__version__, '| Hub', huggingface_hub.__version__, '| download_url export: OK')"
       - name: Compile Python sources
         run: python -m compileall -q app.py studio scripts tests
       - name: Run deterministic tool tests
