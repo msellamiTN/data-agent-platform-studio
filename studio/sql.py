@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import sqlite3
 import time
@@ -9,7 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from .config import (
+    MAX_SQL_CELL_CHARS,
     MAX_SQL_EXECUTION_SECONDS,
+    MAX_SQL_RESULT_BYTES,
     MAX_SQL_ROWS,
     PIPELINE_MANIFEST,
     PIPELINE_ROOT,
@@ -83,6 +86,21 @@ def execute_readonly_query(database_path: str | Path, sql: str) -> dict[str, Any
         uri=True,
         timeout=2.0,
     )
+    # SQLite runtime limits are applied in addition to the application-level
+    # row, cell and response-byte budgets. These reduce oversized-value and
+    # pathological-query exposure before Python materializes result objects.
+    limits = (
+        (getattr(sqlite3, "SQLITE_LIMIT_LENGTH", None), 1_048_576),
+        (getattr(sqlite3, "SQLITE_LIMIT_SQL_LENGTH", None), 10_000),
+        (getattr(sqlite3, "SQLITE_LIMIT_COLUMN", None), 250),
+        (getattr(sqlite3, "SQLITE_LIMIT_ATTACHED", None), 0),
+        (getattr(sqlite3, "SQLITE_LIMIT_COMPOUND_SELECT", None), 10),
+        (getattr(sqlite3, "SQLITE_LIMIT_EXPR_DEPTH", None), 100),
+    )
+    for category, limit in limits:
+        if category is not None:
+            connection.setlimit(category, limit)
+
     allowed_actions = {sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION}
     recursive_action = getattr(sqlite3, "SQLITE_RECURSIVE", None)
     if recursive_action is not None:
@@ -110,24 +128,69 @@ def execute_readonly_query(database_path: str | Path, sql: str) -> dict[str, Any
     def interrupt_if_over_budget() -> int:
         return 1 if time.monotonic() > deadline else 0
 
+    def normalise_cell(value: Any) -> tuple[Any, bool]:
+        """Return JSON-safe SQL scalar data under the per-cell size budget."""
+        if isinstance(value, str):
+            if len(value) > MAX_SQL_CELL_CHARS:
+                return value[:MAX_SQL_CELL_CHARS] + "…", True
+            return value, False
+        if isinstance(value, bytes):
+            return f"[binary value omitted: {len(value):,} bytes]", True
+        if isinstance(value, float) and not math.isfinite(value):
+            return str(value), True
+        if value is None or isinstance(value, (int, float)):
+            return value, False
+        # sqlite3 normally returns only primitive scalar values. Fail closed if
+        # a future adapter or extension introduces an unsupported Python type.
+        return str(value)[:MAX_SQL_CELL_CHARS], True
+
     try:
         connection.set_authorizer(authorizer)
         connection.set_progress_handler(interrupt_if_over_budget, 1000)
         cursor = connection.execute(statement)
-        columns = [item[0] for item in (cursor.description or [])]
-        rows = cursor.fetchmany(MAX_SQL_ROWS + 1)
-        truncated = len(rows) > MAX_SQL_ROWS
-        rows = rows[:MAX_SQL_ROWS]
-        serialised = [
-            {column: value for column, value in zip(columns, row)}
-            for row in rows
-        ]
+        columns = [str(item[0])[:MAX_SQL_CELL_CHARS] for item in (cursor.description or [])]
+        fetched_rows = cursor.fetchmany(MAX_SQL_ROWS + 1)
+        row_limit_truncated = len(fetched_rows) > MAX_SQL_ROWS
+        fetched_rows = fetched_rows[:MAX_SQL_ROWS]
+
+        serialised: list[dict[str, Any]] = []
+        response_bytes = len(
+            json.dumps(columns, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        )
+        truncated_cells = 0
+        byte_limit_truncated = False
+        for row in fetched_rows:
+            safe_row: dict[str, Any] = {}
+            for column, value in zip(columns, row):
+                safe_value, was_truncated = normalise_cell(value)
+                safe_row[column] = safe_value
+                truncated_cells += int(was_truncated)
+            row_bytes = len(
+                json.dumps(safe_row, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+            )
+            if response_bytes + row_bytes > MAX_SQL_RESULT_BYTES:
+                byte_limit_truncated = True
+                break
+            serialised.append(safe_row)
+            response_bytes += row_bytes
+
+        truncated = row_limit_truncated or byte_limit_truncated or truncated_cells > 0
+        reasons = []
+        if row_limit_truncated:
+            reasons.append("row_limit")
+        if byte_limit_truncated:
+            reasons.append("result_byte_limit")
+        if truncated_cells:
+            reasons.append("cell_value_limit")
         return {
             "sql": statement,
             "columns": columns,
             "rows": serialised,
             "row_count": len(serialised),
             "truncated": truncated,
+            "truncation_reasons": reasons,
+            "truncated_cells": truncated_cells,
+            "result_bytes": response_bytes,
         }
     except sqlite3.OperationalError as exc:
         if "interrupted" in str(exc).casefold():
