@@ -144,6 +144,8 @@ The Studio implements useful data-agent capabilities without connecting to an ex
 
 ## Local setup
 
+Python 3.11 or newer is required for the current Transformers 5 runtime.
+
 ~~~bash
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\\Scripts\\activate
