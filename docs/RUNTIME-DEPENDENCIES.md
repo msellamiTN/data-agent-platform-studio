@@ -22,20 +22,22 @@ The previous `requirements-colab-runtime.txt` attempted to pin shared packages t
 
 ## Colab isolation model
 
-The notebook creates `.venv` with `--system-site-packages`:
+The notebook delegates setup to `scripts/bootstrap_colab.py`:
 
-- PyTorch remains the Colab-provided CUDA-enabled build and is visible from the venv.
-- Studio dependencies, including Transformers 5.24.1, Hub 1.32.0, CrewAI and Gradio, are installed in the venv.
-- The notebook does not downgrade or replace unrelated base packages.
-- A global `pip check` is intentionally not used: it reports conflicts among unrelated packages preinstalled in the Colab base image, not just the Studio dependency graph.
+- It runs the bootstrap with the same `sys.executable` used by the active notebook kernel, not a shell-resolved `python` executable.
+- It uses `uv venv --python <kernel-interpreter>` instead of `python -m venv`; the latter invokes `ensurepip`, which is missing from some Colab Python images and caused the reported `CalledProcessError`.
+- It sets `include-system-site-packages = true` in the newly created `pyvenv.cfg` and verifies that `.venv/bin/python` imports the exact same `torch.__file__` as the base Colab kernel.
+- If the same PyTorch build is not visible, bootstrap stops with a diagnostic before installing dependencies or launching the app. It will not silently install a different Torch/CUDA wheel.
+- Studio dependencies, including Transformers 5.24.1, Hub 1.32.0, CrewAI and Gradio, are installed in `.venv` with `uv`; unrelated base packages are not downgraded.
+- A global `pip check` is intentionally not used because it reports conflicts among unrelated packages preinstalled in the Colab base image, rather than checking only the Studio dependency graph.
 
-The notebook runs explicit import/version checks inside the venv. It then executes `scripts/launch_colab.py`, which runs direct model inference and one real CrewAI tool invocation before importing the Gradio application. Both steps occur in the same Python process, so the app reuses the already-loaded model adapter.
+The notebook then executes `scripts/launch_colab.py` with the explicit `.venv/bin/python` path. The launcher performs direct model inference and one real CrewAI tool invocation before importing the Gradio application. Both steps occur in the same Python process, so the app reuses the already-loaded model adapter.
 
 ## Recovery after the earlier notebook cell
 
-The previous notebook attempted to call `google.colab.runtime.restart_runtime()`, which does not exist. The new notebook does not call this method or modify packages in the active notebook kernel.
+The previous notebook attempted to call `google.colab.runtime.restart_runtime()`, which does not exist. The new notebook does not call this method. It also does not run `python -m venv`; use the repository's `uv` bootstrap instead.
 
-Open the updated notebook and run all cells from the top. It installs into `.venv` and launches the app in that venv. The old kernel's imported Transformers modules do not affect the isolated launch process.
+Open the updated notebook and run all cells from the top. Cell 1 fetches the latest branch. Cell 2 must show `DATA2AI COLAB BOOTSTRAP PASSED` before continuing. The bootstrap must report a venv Python path and the exact base Torch file. Cell 6 launches using the explicit venv interpreter. The old kernel's imported Transformers modules do not affect the isolated launch process.
 
 ## Acceptance boundary
 
