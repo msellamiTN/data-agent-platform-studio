@@ -2,54 +2,41 @@
 
 ## Supported compatibility set
 
-The Colab and local profiles use this tested dependency target:
+The Studio targets:
 
 - `transformers==5.24.1`
 - `huggingface-hub==1.32.0`
+- PyTorch `>=2.6.0`
 
-Transformers 5.24.1 requires Hugging Face Hub 1.31 or later and below 3.0. The installed Colab `diffusers==0.42.1` requires Hub 1.32.0 or later and below 3.0. Hub 1.32.0 satisfies both requirements. The Studio now uses the Transformers 5 `dtype=` model-loading argument and requires PyTorch 2.6 or later.
-
-The previous pin `huggingface-hub==0.36.2` was incompatible with the current Colab Diffusers installation. Do not restore it for this runtime.
+Transformers 5.24.1 and current Diffusers both require the Hub 1.x line; Diffusers 0.42.1 specifies `huggingface-hub>=1.32.0,<3.0`. The model loader uses the Transformers 5 `dtype=` argument.
 
 ## Why `download_url` may fail
 
-The error:
+The old notebook preflight incorrectly imported the removed legacy helper `download_url` from `transformers.utils`. The Studio itself does not use it. The preflight now tests the public `AutoTokenizer` and `AutoModelForCausalLM` APIs. A separate third-party library may still request that legacy helper; EasyDeL is one example. Do not add EasyDeL to this Studio runtime unless a feature requires it and its compatibility is tested.
 
-```text
-ImportError: cannot import name 'download_url' from 'transformers.utils'
-```
+## Why the base Colab dependency warnings are not repaired globally
 
-was made reproducible by the previous notebook preflight itself: it incorrectly attempted to import this legacy helper from `transformers.utils`. That assertion was not required by the Studio and has been removed. The current runtime uses the public `AutoTokenizer` and `AutoModelForCausalLM` interfaces instead.
+The reported Colab image contains unrelated preinstalled packages with mutually incompatible constraints. Examples from the supplied log include Google ADK requiring older OpenTelemetry while CrewAI requires OpenTelemetry 1.45.2 or newer, and Tweepy requiring OAuthlib below 4 while CrewAI requires OAuthlib 4 or newer. Downgrading those shared libraries to silence one package's warning can break the agent runtime.
 
-A separate third-party caller can still trigger the same error. EasyDeL, for example, contains an import of `download_url` from `transformers.utils`. The Data Agent Platform Studio does not use EasyDeL; do not import or add it to this runtime unless another feature explicitly requires it and its compatibility with the selected Transformers release has been verified.
+The previous `requirements-colab-runtime.txt` attempted to pin shared packages to satisfy Google ADK, BigFrames, GCSFS, Datasets, Numba and Tweepy. That was the wrong approach for a Studio that uses current CrewAI. The file has been removed. The Colab profile now includes only the Studio's own dependencies.
 
-## Colab package conflicts
+## Colab isolation model
 
-The Colab dependency profile explicitly reconciles the conflicts reported in the runtime log:
+The notebook creates `.venv` with `--system-site-packages`:
 
-- `huggingface-hub==1.32.0`: satisfies Diffusers 0.42.1 and Transformers 5.24.1.
-- `numpy<2.5`: satisfies Numba 0.64.0.
-- `jedi>=0.16`: satisfies the installed IPython 7.34.0 requirement.
-- `opentelemetry-api==1.42.1` and `opentelemetry-sdk==1.42.1`: satisfy Google ADK 2.7.1.
-- `rich>=12.4.4,<14`: satisfies BigFrames 2.51.0.
-- `fsspec==2025.12.0`: satisfies GCSFS 2025.12.0 and Datasets' upper bound.
-- `oauthlib>=3.2.0,<4`: satisfies Tweepy 4.17.0.
+- PyTorch remains the Colab-provided CUDA-enabled build and is visible from the venv.
+- Studio dependencies, including Transformers 5.24.1, Hub 1.32.0, CrewAI and Gradio, are installed in the venv.
+- The notebook does not downgrade or replace unrelated base packages.
+- A global `pip check` is intentionally not used: it reports conflicts among unrelated packages preinstalled in the Colab base image, not just the Studio dependency graph.
 
-These additional constraints live in `requirements-colab-runtime.txt`; they are not imposed on ordinary local installations.
+The notebook runs explicit import/version checks inside the venv. It then executes `scripts/launch_colab.py`, which runs direct model inference and one real CrewAI tool invocation before importing the Gradio application. Both steps occur in the same Python process, so the app reuses the already-loaded model adapter.
 
-## Clean Colab recovery
+## Recovery after the earlier notebook cell
 
-The notebook checks whether any package whose files it will replace has already been imported. If so, it stops before installing anything and tells you to use **Runtime → Restart session**. This avoids mixing package files on disk with stale modules already loaded in memory.
+The previous notebook attempted to call `google.colab.runtime.restart_runtime()`, which does not exist. The new notebook does not call this method or modify packages in the active notebook kernel.
 
-For the runtime shown in the error report:
-
-1. Select **Runtime → Restart session** in Colab.
-2. Reopen the notebook from the repository branch and run all cells from the top.
-3. The notebook installs `requirements-colab.txt`, runs `pip check`, then imports Transformers' public tokenizer/model classes.
-4. Confirm the dependency smoke-check prints Transformers 5.24.1 and Hub 1.32.0 before continuing to the live model/CrewAI acceptance cell.
-
-The notebook does not call `google.colab.runtime.restart_runtime()`; that method is not available in the Colab runtime module. Kernel restart is an explicit user action so package installation is not silently interrupted.
+Open the updated notebook and run all cells from the top. It installs into `.venv` and launches the app in that venv. The old kernel's imported Transformers modules do not affect the isolated launch process.
 
 ## Acceptance boundary
 
-A successful package/import preflight proves that the pinned libraries and public APIs can be imported. It does not prove model download, tokenizer/model loading, GPU allocation, generation, or CrewAI tool execution. Those are checked separately by the live runtime acceptance cell.
+The environment preflight proves that the required packages and public model APIs import in the isolated runtime, and that Colab's Torch installation is visible. The live launch step separately verifies actual model generation and a real CrewAI tool invocation. GPU/T4 and browser acceptance still require execution in a real Colab session.
