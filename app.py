@@ -138,6 +138,26 @@ label, .label-wrap span { color:#34465c !important; font-weight:650 !important; 
 textarea, input, .file-preview, .wrap[data-testid="block-info"] {
   border-radius:9px !important;
 }
+/* Normalize Gradio's default Markdown/group chrome to the Studio design system. */
+.gradio-container .prose h3, .gradio-container .prose h2 {
+  color:var(--studio-ink) !important; font-size:14px !important; font-weight:760 !important;
+  letter-spacing:-.2px !important; margin:0 0 12px !important; padding:0 !important;
+  background:transparent !important; border:0 !important;
+}
+.gradio-container .block, .gradio-container .form {
+  border-color:var(--studio-line) !important;
+}
+.gradio-container .wrap[data-testid="block-info"],
+.gradio-container [data-testid="form"] {
+  border-radius:11px !important;
+}
+.gradio-container .label-wrap span { color:#53657a !important; }
+.gradio-container textarea, .gradio-container input, .gradio-container select {
+  border-color:#dfe6ee !important; background:#fff !important;
+}
+.gradio-container .file-preview, .gradio-container .upload-container {
+  border-radius:10px !important; border-color:#dfe6ee !important;
+}
 .output-card { border:1px solid var(--studio-line); border-radius:12px; background:#fff; padding:15px; }
 .output-title { font-size:11px; font-weight:800; letter-spacing:.7px; color:#738398; text-transform:uppercase; }
 .output-value { color:#1d344d; font-size:15px; font-weight:760; margin-top:6px; }
@@ -255,6 +275,21 @@ def _overview_refresh() -> str:
     return _pipeline_dashboard()
 
 
+def _suggested_questions(columns: list[str]) -> list[str]:
+    """Build conservative question ideas from the active dataset's real columns."""
+    if not columns:
+        return []
+    first = str(columns[0])
+    ideas = [
+        "How many rows are in this dataset?",
+        f"How many {first} values are there?",
+        f"How many distinct {first} values are there?",
+    ]
+    if len(columns) > 1:
+        ideas.append(f"Show a preview of {', '.join(str(c) for c in columns[:4])}.")
+    return ideas
+
+
 def _engineering_handler(
     upload: Any,
     trim_text: bool,
@@ -279,12 +314,16 @@ def _engineering_handler(
         rows_before = int(report.get("rows_before", 0))
         rows_after = int(report.get("rows_after", 0))
         removed = int(report.get("duplicates_removed", 0))
-        mode = "CrewAI tool" if result["execution_mode"] == "crewai_tool" else "Python fallback"
+        is_fallback = result["execution_mode"] != "crewai_tool"
+        mode = "Python fallback" if is_fallback else "CrewAI tool"
+        status_class = "warning" if is_fallback else ""
+        status_label = "ETL ready · agent fallback" if is_fallback else "CrewAI tool executed"
+        heading = "Pipeline ready · deterministic execution" if is_fallback else "Pipeline executed by CrewAI"
         summary = f"""
 <div class="content-card">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-    <div><div class="section-kicker">Execution complete</div><div class="section-heading">Pipeline published successfully</div></div>
-    <span class="status-pill"><span class="dot"></span>Ready</span>
+    <div><div class="section-kicker">Pipeline execution</div><div class="section-heading">{heading}</div></div>
+    <span class="status-pill {status_class}"><span class="dot"></span>{status_label}</span>
   </div>
   <div class="kpi-grid">
     <div class="kpi-card"><div class="kpi-label">Source rows</div><div class="kpi-value">{rows_before:,}</div></div>
@@ -313,6 +352,7 @@ def _engineering_handler(
             result["preview"],
             manifest_view,
             _pipeline_dashboard(report),
+            gr.update(choices=_suggested_questions(report.get("columns", [])), value=None),
         )
     except Exception as exc:
         message = f"{type(exc).__name__}: {exc}"
@@ -323,6 +363,7 @@ def _engineering_handler(
             pd.DataFrame(),
             {"error": message},
             _pipeline_dashboard(),
+            gr.update(choices=[], value=None),
         )
 
 
@@ -358,11 +399,15 @@ def _analysis_handler(question: str):
         answer = result["summary"]
         note = result.get("provider_note") or ""
         mode = result.get("execution_mode", "unknown")
+        is_fallback = mode != "crewai_tool"
+        status_class = "warning" if is_fallback else ""
+        status_label = "Python safe fallback" if is_fallback else "CrewAI tool executed"
+        heading = "Fallback result · inspect execution status" if is_fallback else "Answer from your Gold dataset"
         summary = f"""
 <div class="content-card">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-    <div><div class="section-kicker">Analysis complete</div><div class="section-heading">Answer from your Gold dataset</div></div>
-    <span class="status-pill"><span class="dot"></span>{_escape(mode)}</span>
+    <div><div class="section-kicker">Analysis result</div><div class="section-heading">{heading}</div></div>
+    <span class="status-pill {status_class}"><span class="dot"></span>{status_label}</span>
   </div>
   <div style="color:#34465c;font-size:13px;line-height:1.7;margin-top:12px">{_escape(answer)}</div>
   <div class="helper-note" style="margin-top:12px">{_escape(note)}</div>
@@ -512,7 +557,7 @@ with gr.Blocks(
                 de_run.click(
                     _engineering_handler,
                     inputs=[de_file, de_trim, de_duplicates, de_empty, de_context],
-                    outputs=[de_summary, de_report, de_download, de_preview, de_manifest, overview_dashboard],
+                    outputs=[de_summary, de_report, de_download, de_preview, de_manifest, overview_dashboard, da_question_ideas],
                 )
 
             with gr.Tab("Data Analysis", id="analysis"):
@@ -534,16 +579,17 @@ with gr.Blocks(
                                 placeholder="e.g. Which region generated the highest revenue?",
                                 lines=4,
                             )
-                            gr.Examples(
-                                examples=[
-                                    ["What is the revenue by region in the first quarter?"],
-                                    ["Show total sales by product."],
-                                    ["Which region has the highest revenue?"],
-                                    ["Show the 5 rows with the highest revenue."],
-                                    ["Summarize the columns and data quality of this dataset."],
-                                ],
-                                inputs=[da_question],
-                                label="Suggested questions",
+                            da_question_ideas = gr.Dropdown(
+                                label="Question ideas · based on active dataset",
+                                choices=[],
+                                value=None,
+                                interactive=True,
+                                allow_custom_value=False,
+                            )
+                            da_question_ideas.change(
+                                lambda value: value or "",
+                                inputs=[da_question_ideas],
+                                outputs=[da_question],
                             )
                             da_run = gr.Button("Analyze dataset", variant="primary", size="lg")
                         gr.HTML(
