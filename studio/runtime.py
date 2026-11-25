@@ -1,4 +1,6 @@
-"""Runtime selection helpers kept independent from heavyweight ML imports."""
+"""Runtime and environment-setting helpers independent from ML imports."""
+
+import math
 
 
 def resolve_runtime_device(requested: str | None, cuda_available: bool) -> str:
@@ -25,3 +27,25 @@ def resolve_cpu_threads(requested: str | None, available: int | None = None) -> 
     if threads < 1:
         raise ValueError("HF_CPU_THREADS must be a positive integer.")
     return threads
+
+
+def positive_int_setting(value: str | None, name: str, default: int) -> int:
+    """Parse a strictly positive integer environment setting."""
+    try:
+        parsed = default if value is None or not value.strip() else int(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a positive integer.") from exc
+    if parsed < 1:
+        raise ValueError(f"{name} must be a positive integer.")
+    return parsed
+
+
+def positive_float_setting(value: str | None, name: str, default: float) -> float:
+    """Parse a finite, strictly positive floating-point environment setting."""
+    try:
+        parsed = default if value is None or not value.strip() else float(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a positive finite number.") from exc
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise ValueError(f"{name} must be a positive finite number.")
+    return parsed
