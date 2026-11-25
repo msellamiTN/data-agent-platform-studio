@@ -16,7 +16,8 @@ flowchart LR
     BR --> CL[Profile / Clean / Validate]
     CL --> SI[Silver cleaned data]
     SI --> GO[Gold SQLite warehouse]
-    GO --> MC[Manifest + Quality + Semantic Catalog]
+    GO --> RUN[Immutable run artifacts]
+    RUN --> MC[Atomic active manifest]
     MC --> DA[Data Analysis Agent]
     DA --> SC[Schema inspection tool]
     SC --> LLM[Local Qwen model via CrewAI]
@@ -51,24 +52,26 @@ Mandatory flow:
 6. Call the read-only SQL tool.
 7. Summarize and visualize only the returned rows.
 
-If the small model does not complete its tool call, a deterministic fallback query is run and the UI labels the fallback mode.
+For supported aggregate intents (row count, non-null column count and distinct column count), a schema-aware deterministic query plan is validated against the active column list. If the agent proposes a different query, the verified plan takes precedence. For other questions, the agent may propose one SELECT; when it does not execute a query, the application returns a clearly labeled preview rather than claiming to answer the question. Displayed aggregate facts are computed from returned SQL values, not from model narration.
 
 ## Shared pipeline contract
 
-The active run is stored under `workspace/pipeline/current/`:
+Each run is immutable and stored beneath `workspace/pipeline/runs/<pipeline_id>/`. The current manifest is the active-run pointer and is atomically replaced only after a run's artifacts and run manifest are complete:
 
 ~~~text
-workspace/pipeline/current/
-├── bronze/
-│   └── source.csv
-├── silver/
-│   └── cleaned.csv
-├── gold/
-│   └── warehouse.sqlite
-├── metadata/
-│   └── quality_report.json
-└── manifest.json
+workspace/pipeline/
+├── current/
+│   └── manifest.json
+└── runs/
+    └── <pipeline_id>/
+        ├── bronze/source.csv
+        ├── silver/cleaned.csv
+        ├── gold/warehouse.sqlite
+        ├── metadata/quality_report.json
+        └── manifest.json
 ~~~
+
+This gives in-flight analysis requests a stable database file even when a new pipeline is published. A failed run does not replace the current active manifest. Run artifacts are retained; automated retention and cleanup are outside the current scope.
 
 Gold SQLite:
 - `silver_data` is the canonical analysis table.
@@ -76,6 +79,7 @@ Gold SQLite:
 
 The manifest records:
 - pipeline ID and dataset name;
+- SHA-256 hashes for Bronze, Silver and Gold artifacts;
 - status and UTC creation time;
 - Bronze/Silver/Gold artifact paths;
 - row counts and duplicate-removal counts;
@@ -90,7 +94,7 @@ This manifest is the shared contract between the two agents. Both scenarios run 
 
 - **Orchestration:** CrewAI.
 - **Model:** Qwen/Qwen2.5-1.5B-Instruct from Hugging Face.
-- **Inference:** Transformers with automatic device placement and FP16 when CUDA is available.
+- **Inference:** Transformers with FP16 on CUDA and FP32 on CPU.
 - **Runtime target:** Google Colab GPU, T4 when available.
 - **UI:** Gradio Blocks with two separate scenario tabs.
 
@@ -118,9 +122,10 @@ The independent Data Analysis tool:
 - accepts one statement beginning with SELECT or WITH;
 - rejects comments and multiple statements;
 - opens the SQLite database using read-only URI mode;
-- applies a SQLite authorizer permitting read/select/function operations only;
-- caps result rows at 100;
-- verifies the database path is inside the application workspace.
+- applies a SQLite authorizer that permits reads only from `silver_data` and blocks writes, schema reads, attachment and unsafe functions;
+- interrupts a query after a configurable five-second execution budget;
+- caps returned rows at 100;
+- verifies that the resolved database path is inside the pipeline workspace.
 
 The UI does not expose shell execution, arbitrary Python execution, database writes or credentials to the agents.
 
