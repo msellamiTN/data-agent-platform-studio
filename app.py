@@ -463,7 +463,7 @@ def _analysis_handler(question: str):
         result = run_data_analysis(question)
         frame = result["dataframe"]
         figure = None
-        if not frame.empty and result.get("execution_mode") not in {"safe_preview_fallback", "validated_query_plan"} and len(frame.index) > 1:
+        if not frame.empty and result.get("result_kind") != "preview" and len(frame.index) > 1:
             numeric = [
                 column for column in frame.columns
                 if pd.api.types.is_numeric_dtype(frame[column])
