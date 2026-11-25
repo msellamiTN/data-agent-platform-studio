@@ -45,7 +45,7 @@ The Data Analysis UI has no source upload. It consumes the active pipeline gener
 
 Mandatory flow:
 1. Read the active manifest.
-2. Inspect the actual Gold table schema and sample rows.
+2. Inspect the actual Gold table schema, compact column profile and bounded sample values.
 3. Read column profile and semantic catalog.
 4. Interpret the business question in the supplied business context.
 5. Generate a single SELECT query against `silver_data`.
