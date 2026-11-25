@@ -39,7 +39,10 @@ class HuggingFaceLocalLLM(BaseLLM):
         super().__init__(model=model_id, temperature=temperature)
         self._max_new_tokens = max_new_tokens
         self._max_input_tokens = max_input_tokens
-        self._device = resolve_runtime_device(device or os.getenv("HF_DEVICE", "auto"), torch.cuda.is_available())
+        self._device = resolve_runtime_device(
+            device or os.getenv("HF_DEVICE", "auto"),
+            torch.cuda.is_available(),
+        )
 
     @property
     def runtime_device(self) -> str:
@@ -62,16 +65,14 @@ class HuggingFaceLocalLLM(BaseLLM):
         if self._device == "cuda":
             self._hf_model = AutoModelForCausalLM.from_pretrained(
                 self.model,
-                torch_dtype=torch.float16,
+                dtype=torch.float16,
                 device_map="auto",
-                low_cpu_mem_usage=True,
             )
         else:
             # CPU path deliberately avoids device_map="auto" and half precision.
             self._hf_model = AutoModelForCausalLM.from_pretrained(
                 self.model,
-                torch_dtype=torch.float32,
-                low_cpu_mem_usage=True,
+                dtype=torch.float32,
             )
             self._hf_model.to("cpu")
 
