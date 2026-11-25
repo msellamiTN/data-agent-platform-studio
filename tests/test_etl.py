@@ -1,23 +1,33 @@
 import json
 import sqlite3
 
+import pytest
+from pathlib import Path
+
 import pandas as pd
 
 import studio.etl as etl_module
+import studio.sql as sql_module
 
 
-def test_csv_pipeline_trims_deduplicates_and_loads_shared_layers(tmp_path, monkeypatch):
-    pipeline_dir = tmp_path / "pipeline" / "current"
-    manifest_path = pipeline_dir / "manifest.json"
-    monkeypatch.setattr(etl_module, "WORKSPACE_DIR", tmp_path)
-    monkeypatch.setattr(etl_module, "CURRENT_PIPELINE_DIR", pipeline_dir)
+def _configure_workspace(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    pipeline_root = workspace / "pipeline"
+    current_dir = pipeline_root / "current"
+    manifest_path = current_dir / "manifest.json"
+    monkeypatch.setattr(etl_module, "WORKSPACE_DIR", workspace)
+    monkeypatch.setattr(etl_module, "PIPELINE_ROOT", pipeline_root)
+    monkeypatch.setattr(etl_module, "CURRENT_PIPELINE_DIR", current_dir)
     monkeypatch.setattr(etl_module, "PIPELINE_MANIFEST", manifest_path)
-    import studio.sql as sql_module
-    monkeypatch.setattr(sql_module, "WORKSPACE_DIR", tmp_path)
-    monkeypatch.setattr(sql_module, "CURRENT_PIPELINE_DIR", pipeline_dir)
+    monkeypatch.setattr(sql_module, "PIPELINE_ROOT", pipeline_root)
     monkeypatch.setattr(sql_module, "PIPELINE_MANIFEST", manifest_path)
+    return workspace, pipeline_root, manifest_path
 
-    source = tmp_path / "input.csv"
+
+def test_csv_pipeline_trims_deduplicates_and_publishes_shared_layers(tmp_path, monkeypatch):
+    workspace, pipeline_root, manifest_path = _configure_workspace(tmp_path, monkeypatch)
+    source = workspace / "input.csv"
+    workspace.mkdir(parents=True)
     pd.DataFrame(
         [
             {"customer": " Alice ", "city": "Tunis"},
@@ -35,6 +45,7 @@ def test_csv_pipeline_trims_deduplicates_and_loads_shared_layers(tmp_path, monke
         business_context="Customer delivery dataset used for the retail demo.",
     )
 
+    run_dir = pipeline_root / "runs" / report["pipeline_id"]
     assert report["status"] == "READY"
     assert report["rows_before"] == 4
     assert report["rows_after"] == 2
@@ -44,9 +55,15 @@ def test_csv_pipeline_trims_deduplicates_and_loads_shared_layers(tmp_path, monke
     assert "customer" in report["column_profile"]
     assert "city" in report["semantic_catalog"]["dimensions"]
     assert manifest_path.is_file()
-    assert (pipeline_dir / "bronze" / "source.csv").is_file()
-    assert (pipeline_dir / "silver" / "cleaned.csv").is_file()
-    assert (pipeline_dir / "gold" / "warehouse.sqlite").is_file()
+    assert Path(report["layers"]["bronze"]).is_file()
+    assert Path(report["layers"]["silver"]).is_file()
+    assert Path(report["database"]).is_file()
+    assert Path(report["quality_report"]).is_file()
+    assert Path(report["manifest_path"]).is_file()
+    assert Path(report["database"]).is_relative_to(run_dir)
+    assert report["source_sha256"]
+    assert report["silver_sha256"]
+    assert report["gold_sha256"]
 
     cleaned = pd.read_csv(report["cleaned_csv"])
     assert cleaned.iloc[0]["customer"] == "Alice"
@@ -57,7 +74,6 @@ def test_csv_pipeline_trims_deduplicates_and_loads_shared_layers(tmp_path, monke
     assert silver_count == 2
     assert staging_count == 2
 
-    # The analysis-side contract resolves the very same manifest and Gold table.
     schema = sql_module.describe_pipeline_schema()
     assert schema["pipeline_id"] == report["pipeline_id"]
     assert schema["table"] == "silver_data"
@@ -66,9 +82,50 @@ def test_csv_pipeline_trims_deduplicates_and_loads_shared_layers(tmp_path, monke
     assert "customer" in schema["column_profile"]
     query = sql_module.execute_readonly_query(
         report["database"],
-        "SELECT customer FROM silver_data ORDER BY customer",
+        'SELECT customer FROM silver_data ORDER BY customer',
     )
     assert query["row_count"] == 2
 
-    quality = json.loads(open(report["quality_report"], encoding="utf-8").read())
+    quality = json.loads(Path(report["quality_report"]).read_text(encoding="utf-8"))
     assert quality["rows_after"] == 2
+
+
+def test_pipeline_runs_are_immutable_and_active_manifest_switches_atomically(tmp_path, monkeypatch):
+    workspace, pipeline_root, manifest_path = _configure_workspace(tmp_path, monkeypatch)
+    workspace.mkdir(parents=True)
+    first = workspace / "first.csv"
+    second = workspace / "second.csv"
+    pd.DataFrame({"name": ["Ada", "Lin"]}).to_csv(first, index=False)
+    pd.DataFrame({"name": ["Grace"]}).to_csv(second, index=False)
+
+    first_manifest = etl_module.run_csv_pipeline(first)
+    second_manifest = etl_module.run_csv_pipeline(second)
+
+    assert first_manifest["pipeline_id"] != second_manifest["pipeline_id"]
+    assert first_manifest["database"] != second_manifest["database"]
+    assert Path(first_manifest["database"]).is_file()
+    assert Path(second_manifest["database"]).is_file()
+    current = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert current["pipeline_id"] == second_manifest["pipeline_id"]
+
+    # The first run remains queryable even after a second run becomes active.
+    first_result = sql_module.execute_readonly_query(
+        first_manifest["database"], "SELECT COUNT(*) AS row_count FROM silver_data"
+    )
+    assert first_result["rows"][0]["row_count"] == 2
+
+
+def test_failed_pipeline_does_not_replace_previous_active_manifest(tmp_path, monkeypatch):
+    workspace, _, manifest_path = _configure_workspace(tmp_path, monkeypatch)
+    workspace.mkdir(parents=True)
+    valid = workspace / "valid.csv"
+    invalid = workspace / "all_empty.csv"
+    pd.DataFrame({"name": ["A"]}).to_csv(valid, index=False)
+    pd.DataFrame({"name": [None]}).to_csv(invalid, index=False)
+
+    active = etl_module.run_csv_pipeline(valid)
+    with pytest.raises(ValueError, match="All rows were removed"):
+        etl_module.run_csv_pipeline(invalid)
+
+    current = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert current["pipeline_id"] == active["pipeline_id"]
