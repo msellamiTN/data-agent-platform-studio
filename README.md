@@ -39,6 +39,8 @@ See [Hugging Face runtime compatibility](docs/RUNTIME-DEPENDENCIES.md) for the v
 
 ## Runtime and core stack
 
+The Hugging Face compatibility set is intentionally pinned to `transformers==4.57.6` and `huggingface-hub==0.36.2`; it is shared by Colab, local installation and CI. Do not independently upgrade these two libraries to unbounded latest versions.
+
 | Layer | Technology |
 |---|---|
 | Notebook/runtime | Google Colab CPU or GPU (T4 target) |
@@ -175,6 +177,7 @@ To validate the real local model and CrewAI tool loop before opening the UI, run
 │   ├── test_etl.py
 │   ├── test_llm_runtime.py
 │   └── test_sql_guard.py
+├── requirements-hf-compat.txt
 ├── requirements-core.txt
 ├── requirements-colab.txt
 ├── requirements.txt
