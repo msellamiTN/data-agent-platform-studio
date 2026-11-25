@@ -180,6 +180,24 @@ textarea, input, .file-preview, .wrap[data-testid="block-info"] {
   color:var(--studio-ink); font-size:13px; font-weight:780; letter-spacing:-.2px;
   margin:0 0 13px; padding:0 0 10px; border-bottom:1px solid var(--studio-line);
 }
+#engineering-source-panel, #engineering-rules-panel, #analysis-question-panel {
+  background:#fff !important;
+  border:1px solid var(--studio-line) !important;
+  border-radius:15px !important;
+  box-shadow:0 2px 10px rgba(17,36,58,.025) !important;
+  padding:17px !important;
+  gap:12px !important;
+}
+#engineering-source-panel .panel-title,
+#engineering-rules-panel .panel-title,
+#analysis-question-panel .panel-title { width:100%; }
+#engineering-source-panel .block,
+#engineering-rules-panel .block,
+#analysis-question-panel .block { border-color:transparent !important; }
+#engineering-source-panel label,
+#engineering-rules-panel label,
+#analysis-question-panel label { color:#34465c !important; }
+
 .gradio-container .gradio-group,
 .gradio-container .form,
 .gradio-container .block.gradio-group {
