@@ -238,15 +238,21 @@ textarea, input, .file-preview, .wrap[data-testid="block-info"] {
 
 def _runtime_label() -> str:
     requested = os.getenv("HF_DEVICE", "auto").strip().lower()
+    if requested not in {"auto", "cpu", "cuda"}:
+        return "Invalid HF_DEVICE setting"
     if requested == "cpu":
         return "CPU · Transformers FP32"
     try:
         import torch
-        if torch.cuda.is_available() and requested != "cpu":
+        cuda_available = torch.cuda.is_available()
+        if cuda_available:
             name = torch.cuda.get_device_name(0)
             return f"GPU · {name} · FP16"
+        if requested == "cuda":
+            return "CUDA requested · unavailable"
     except Exception:
-        pass
+        if requested == "cuda":
+            return "CUDA requested · Torch unavailable"
     return "CPU · Transformers FP32"
 
 
