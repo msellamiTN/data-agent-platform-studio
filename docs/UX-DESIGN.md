@@ -29,7 +29,8 @@ Purpose: prepare a dataset once and publish its contract.
 - Optional business description to define metrics and domain language.
 - Explicit controls for trimming, exact duplicates and fully empty rows.
 - Primary action: Run data pipeline.
-- Result summary with counts and pipeline ID.
+- Result summary with counts, pipeline ID, artifact hashes and independent labels for ETL executor versus CrewAI orchestration.
+- An immutable run is published atomically; a failed run cannot replace the previous active manifest.
 - Progressive disclosure: quality report, Silver preview/download, active manifest.
 - On success, refresh Overview and make the active pipeline visible to the Analysis Agent.
 
@@ -40,6 +41,9 @@ Purpose: ask a question about the active dataset, not upload another one.
 - Short explanation of the four-step agent process.
 - Answer panel with execution mode and dataset/pipeline reference.
 - SQL shown in a collapsed section for transparency without overwhelming business users.
+- Disable analysis until an active Gold run exists; clearly display the active dataset and pipeline ID.
+- Validate supported count intents against the real schema and never replace an ambiguous count request with an unrelated preview.
+- Clear stale results when a new active pipeline is published.
 - Result rows and chart shown beneath the answer.
 
 ### Platform
@@ -65,7 +69,7 @@ Purpose: explain execution and trust boundaries.
 - Never make users upload the same data twice for two separate agents.
 - Never imply Data Analysis is ready until an active Gold pipeline manifest exists.
 - Keep technical metadata and raw JSON in accordions.
-- Always show whether an action used the CrewAI tool or a deterministic fallback.
+- Always show the ETL executor separately from CrewAI orchestration and distinguish a validated query plan from preview-only fallback.
 - Always show pipeline ID and row counts after a successful pipeline run.
 - Preserve the SQL query and bounded read-only semantics for user inspection.
 - Explain errors in the context of the current task, not as raw tracebacks alone.
@@ -89,6 +93,13 @@ Purpose: explain execution and trust boundaries.
 - [ ] Analysis screen contains no second dataset upload.
 - [ ] Analysis screen explains how the same Gold dataset is used.
 - [ ] Empty question and missing pipeline states are understandable.
+- [ ] Analysis stays disabled until the first active Gold pipeline is published.
+- [ ] The active dataset and pipeline ID are visible in the Analysis workspace.
+- [ ] A new pipeline clears stale analysis output and updates the shared-dataset indicator.
+- [ ] A count question uses a matching real column and returns a scalar aggregate.
+- [ ] A count request with an unknown column asks for a valid column instead of showing unrelated rows.
+- [ ] A model-generated preview cannot silently replace a deterministic count plan.
+- [ ] A failed new pipeline leaves the previous active manifest and Gold database readable.
 - [ ] SQL is inspectable but not the dominant part of the Analysis UX.
 - [ ] The two agent roles and their responsibilities are visually distinct.
 - [ ] No external provider/hosted-agent dependency is present.
