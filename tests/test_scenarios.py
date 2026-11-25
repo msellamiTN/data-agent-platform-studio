@@ -58,6 +58,7 @@ def _install_fake_crewai(monkeypatch, query_to_issue):
             self.kwargs = kwargs
 
     crewai = types.ModuleType("crewai")
+    crewai.__path__ = []
     crewai.Agent = FakeAgent
     crewai.Crew = FakeCrew
     crewai.Process = types.SimpleNamespace(sequential="sequential")
