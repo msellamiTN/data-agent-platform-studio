@@ -15,7 +15,9 @@ Please do not disclose credentials, personal data, or exploitable details in a p
 - Uploaded files are copied into the application workspace before ETL.
 - Each successful ETL run receives an immutable run directory and independent SQLite database.
 - The active pipeline manifest is atomically replaced only after all run artifacts have been completed.
-- The SQL interface accepts a single `SELECT` or `WITH` statement, rejects comments and multiple statements, opens SQLite read-only, restricts reads to `silver_data`, applies a query time budget, and caps returned rows.
+- The SQL interface accepts a single `SELECT` or `WITH` statement, rejects comments and multiple statements, opens SQLite read-only, requires reads from `silver_data`, applies SQLite resource limits and a query time budget, and bounds returned rows, cell values and serialized response bytes.
+- Query results are streamed one row at a time, normalized to JSON-safe values, and report when cells or rows have been truncated; BLOB contents are omitted.
+- The local model enforces `MAX_INPUT_TOKENS` and rejects oversized prompts rather than silently truncating policy or tool instructions.
 - Agents are exposed only to fixed Python tools; no shell or arbitrary Python tool is supplied.
 - The model executes locally through Transformers. No external hosted-agent endpoint is configured by this application.
 - Business descriptions and sample values are treated as data/context, not as instructions that can extend tool permissions.
