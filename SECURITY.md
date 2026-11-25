@@ -10,7 +10,8 @@ Please do not disclose credentials, personal data, or exploitable details in a p
 
 ## Current security controls
 
-- Only CSV files are accepted by the pipeline copy function; file size is limited by `MAX_UPLOAD_MB`.
+- Only CSV files are accepted by the pipeline copy function; file size, parsed row count and column count are limited by `MAX_UPLOAD_MB`, `MAX_DATA_ROWS` and `MAX_DATA_COLUMNS`.
+- UTF-8 headers must be non-empty and unique case-insensitively; business-context and analysis-question lengths are bounded.
 - Uploaded files are copied into the application workspace before ETL.
 - Each successful ETL run receives an immutable run directory and independent SQLite database.
 - The active pipeline manifest is atomically replaced only after all run artifacts have been completed.
