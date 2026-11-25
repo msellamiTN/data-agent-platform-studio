@@ -123,7 +123,7 @@ def fallback_pipeline_sql(question: str) -> str:
         return '"' + name.replace('"', '""') + '"'
 
     # Count questions must produce an aggregate, never a row preview.
-    count_match = re.search(r"(?:how many|number of|count|combien|nombre de)\\s+(?:distinct\\s+)?([\\wÀ-ÿ]+)", lowered)
+    count_match = re.search(r"(?:how many|number of|count|combien|nombre de)\s+(?:distinct\s+)?([\wÀ-ÿ]+)", lowered)
     if count_match:
         requested_column = columns.get(count_match.group(1).casefold())
         if requested_column:
