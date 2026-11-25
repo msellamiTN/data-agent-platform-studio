@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import os
@@ -75,12 +76,27 @@ def run_csv_pipeline(
     immutable SQLite database while a later run is being prepared.
     """
     source = _workspace_file(csv_path)
-    context = business_context.strip()
+    context = str(business_context or "").strip()
     if len(context) > MAX_BUSINESS_CONTEXT_CHARS:
         raise ValueError(
             f"Business description exceeds the {MAX_BUSINESS_CONTEXT_CHARS:,}-character limit."
         )
-    frame = pd.read_csv(source, nrows=MAX_DATA_ROWS + 1)
+    try:
+        with source.open("r", encoding="utf-8-sig", newline="") as csv_file:
+            headers = next(csv.reader(csv_file), [])
+    except UnicodeDecodeError as exc:
+        raise ValueError("CSV headers must be valid UTF-8 text.") from exc
+    if not headers or any(not str(header).strip() for header in headers):
+        raise ValueError("CSV must contain non-empty column names in its first row.")
+    normalized_headers = [str(header).strip().casefold() for header in headers]
+    if len(set(normalized_headers)) != len(normalized_headers):
+        raise ValueError("CSV column names must be unique (case-insensitive).")
+    if len(headers) > MAX_DATA_COLUMNS:
+        raise ValueError(
+            f"CSV exceeds the {MAX_DATA_COLUMNS:,}-column processing limit."
+        )
+
+    frame = pd.read_csv(source, encoding="utf-8-sig", nrows=MAX_DATA_ROWS + 1)
     if len(frame) > MAX_DATA_ROWS:
         raise ValueError(
             f"CSV exceeds the {MAX_DATA_ROWS:,}-row processing limit."
