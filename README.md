@@ -66,16 +66,22 @@ The Python pipeline performs the actual data operations. CrewAI orchestrates the
 
 ### Shared pipeline artifacts
 
-The active run is stored under `workspace/pipeline/current/`:
+Each execution is stored as an immutable run under `workspace/pipeline/runs/<pipeline_id>/`. The active manifest at `workspace/pipeline/current/manifest.json` is atomically replaced only after every artifact is complete:
 
 ~~~text
-workspace/pipeline/current/
-├── bronze/source.csv
-├── silver/cleaned.csv
-├── gold/warehouse.sqlite
-├── metadata/quality_report.json
-└── manifest.json
+workspace/pipeline/
+├── current/
+│   └── manifest.json          # atomic pointer to the active run
+└── runs/
+    └── <pipeline_id>/
+        ├── bronze/source.csv
+        ├── silver/cleaned.csv
+        ├── gold/warehouse.sqlite
+        ├── metadata/quality_report.json
+        └── manifest.json      # immutable run manifest
 ~~~
+
+A later run does not overwrite a database being read by an earlier analysis request. Failed runs do not replace the previous active manifest. Runs are retained until explicitly removed; persistent retention and cleanup policies are not yet implemented.
 
 Gold SQLite exposes:
 - `silver_data`: canonical curated table consumed by the Data Analysis Agent;
@@ -103,10 +109,12 @@ The agent must inspect the schema before generating SQL. It cannot query an assu
 - Only one `SELECT` or `WITH ... SELECT` statement is accepted.
 - SQL comments and multiple statements are rejected.
 - SQLite is opened with read-only mode.
-- A SQLite authorizer blocks write and schema-changing operations.
+- A SQLite authorizer permits reads only from the canonical `silver_data` table and blocks writes, schema access and unsafe functions.
+- Query execution is interrupted after the configured `MAX_SQL_EXECUTION_SECONDS` budget (default: 5 seconds).
 - Query output is capped at 100 rows.
+- Common row-count, column-count and distinct-count intents are planned against real schema names; an ambiguous count request returns a clarification instead of silently showing a preview.
 
-If the small local model does not complete its tool call, the application uses a clearly labeled Python fallback. The fallback supports only explicitly implemented schema-aware query patterns; a row preview is labeled as a preview and is never presented as an aggregate answer. Count questions generate `COUNT` / `COUNT(DISTINCT ...)` queries against a matching real column. The UI distinguishes successful CrewAI tool execution from deterministic ETL or SQL fallback.
+If the small local model does not complete its tool call, the application uses a clearly labeled Python fallback. The fallback supports only explicitly implemented schema-aware query patterns; a row preview is labeled as a preview and is never presented as an aggregate answer. Count questions generate `COUNT` / `COUNT(DISTINCT ...)` queries against a matching real column. The UI distinguishes CrewAI tool execution, deterministic query-plan verification and preview-only fallback. A verified aggregate answer is composed from the actual SQL result, not from unverified model narration.
 
 ## Functional patterns implemented locally
 
@@ -145,6 +153,7 @@ Open `http://localhost:7860`. CPU is selected automatically when CUDA is unavail
 │   ├── config.py
 │   ├── etl.py
 │   ├── llm.py
+│   ├── runtime.py
 │   ├── scenarios.py
 │   └── sql.py
 ├── data/sales_demo.csv
@@ -152,6 +161,7 @@ Open `http://localhost:7860`. CPU is selected automatically when CUDA is unavail
 ├── notebooks/Colab_T4_Gradio_Studio.ipynb
 ├── tests/
 │   ├── test_etl.py
+│   ├── test_llm_runtime.py
 │   └── test_sql_guard.py
 ├── requirements.txt
 └── requirements-dev.txt
@@ -177,7 +187,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ~~~
 
-Tests cover the shared Bronze/Silver/Gold artifacts, common pipeline manifest and read-only SQL guard. They do not download the Hugging Face model or claim that a Colab T4 runtime was exercised.
+Tests cover immutable run publication, active-manifest switching, failed-run isolation, read-only table scope, SQL timeout enforcement, bounded semantic query plans and runtime-device selection. They do not download the Hugging Face model or claim that a Colab T4 runtime was exercised.
 
 ## Safety and scope
 
