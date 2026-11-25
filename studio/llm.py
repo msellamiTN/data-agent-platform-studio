@@ -9,7 +9,7 @@ from pydantic import PrivateAttr
 from crewai import BaseLLM
 
 from .config import MAX_NEW_TOKENS, MODEL_ID
-from .runtime import resolve_runtime_device
+from .runtime import resolve_cpu_threads, resolve_runtime_device
 
 
 class HuggingFaceLocalLLM(BaseLLM):
@@ -43,6 +43,13 @@ class HuggingFaceLocalLLM(BaseLLM):
         if self._hf_model is not None:
             return
 
+        if self._device == "cpu":
+            # Configure CPU parallelism before model loading and first inference.
+            cpu_threads = resolve_cpu_threads(
+                os.getenv("HF_CPU_THREADS"), available=os.cpu_count()
+            )
+            torch.set_num_threads(cpu_threads)
+
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         self._tokenizer = AutoTokenizer.from_pretrained(self.model, use_fast=True)
@@ -61,9 +68,6 @@ class HuggingFaceLocalLLM(BaseLLM):
                 low_cpu_mem_usage=True,
             )
             self._hf_model.to("cpu")
-            # Small local models can otherwise oversubscribe hosted CPU runtimes.
-            cpu_threads = int(os.getenv("HF_CPU_THREADS", str(max(1, os.cpu_count() or 1))))
-            torch.set_num_threads(max(1, cpu_threads))
 
         if self._tokenizer.pad_token_id is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
