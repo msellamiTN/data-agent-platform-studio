@@ -129,3 +129,34 @@ def test_failed_pipeline_does_not_replace_previous_active_manifest(tmp_path, mon
 
     current = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert current["pipeline_id"] == active["pipeline_id"]
+
+
+
+def test_pipeline_rejects_row_limit_exceeded(tmp_path, monkeypatch):
+    workspace, _, _ = _configure_workspace(tmp_path, monkeypatch)
+    workspace.mkdir(parents=True, exist_ok=True)
+    source = workspace / "too_many_rows.csv"
+    pd.DataFrame({"name": ["A", "B", "C"]}).to_csv(source, index=False)
+    monkeypatch.setattr(etl_module, "MAX_DATA_ROWS", 2)
+    with pytest.raises(ValueError, match="2-row processing limit"):
+        etl_module.run_csv_pipeline(source)
+
+
+def test_pipeline_rejects_column_limit_exceeded(tmp_path, monkeypatch):
+    workspace, _, _ = _configure_workspace(tmp_path, monkeypatch)
+    workspace.mkdir(parents=True, exist_ok=True)
+    source = workspace / "too_many_columns.csv"
+    pd.DataFrame({"a": [1], "b": [2], "c": [3]}).to_csv(source, index=False)
+    monkeypatch.setattr(etl_module, "MAX_DATA_COLUMNS", 2)
+    with pytest.raises(ValueError, match="2-column processing limit"):
+        etl_module.run_csv_pipeline(source)
+
+
+def test_pipeline_rejects_oversized_business_context(tmp_path, monkeypatch):
+    workspace, _, _ = _configure_workspace(tmp_path, monkeypatch)
+    workspace.mkdir(parents=True, exist_ok=True)
+    source = workspace / "context.csv"
+    pd.DataFrame({"name": ["A"]}).to_csv(source, index=False)
+    monkeypatch.setattr(etl_module, "MAX_BUSINESS_CONTEXT_CHARS", 5)
+    with pytest.raises(ValueError, match="5-character limit"):
+        etl_module.run_csv_pipeline(source, business_context="too long")
