@@ -161,7 +161,11 @@ def execute_readonly_query(database_path: str | Path, sql: str) -> dict[str, Any
         ]
         serialised: list[dict[str, Any]] = []
         response_bytes = len(
-            json.dumps(columns, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            json.dumps(
+                {"sql": statement, "columns": columns},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
         )
         if response_bytes > MAX_SQL_RESULT_BYTES:
             raise ValueError(
