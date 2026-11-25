@@ -210,24 +210,41 @@ def execute_readonly_query(database_path: str | Path, sql: str) -> dict[str, Any
 
 
 def describe_pipeline_schema() -> dict[str, Any]:
-    """Describe the exact Gold table from the active immutable pipeline run."""
+    """Return compact, schema-grounded context for the local analysis agent."""
     manifest = get_current_pipeline()
-    database = Path(manifest["database"]).resolve()
-    sample_result = execute_readonly_query(
-        database,
-        "SELECT * FROM silver_data LIMIT 5",
-    )
-    columns = sample_result["columns"]
+    columns = [str(column) for column in manifest.get("columns", [])]
+    raw_profile = manifest.get("column_profile", {})
+    compact_profile: dict[str, Any] = {}
+    for column in columns:
+        profile = raw_profile.get(column, {})
+        samples = profile.get("sample_values", [])
+        compact_profile[column] = {
+            "dtype": profile.get("dtype", "unknown"),
+            "null_count": profile.get("null_count"),
+            "distinct_count": profile.get("distinct_count"),
+            "sample_values": [
+                str(value)[:64] + ("…" if len(str(value)) > 64 else "")
+                for value in samples[:1]
+            ],
+        }
+    semantic = manifest.get("semantic_catalog", {})
     return {
         "pipeline_id": manifest["pipeline_id"],
         "dataset": manifest["dataset"],
         "table": "silver_data",
         "columns": columns,
-        "column_profile": manifest.get("column_profile", {}),
-        "semantic_catalog": manifest.get("semantic_catalog", {}),
+        "column_profile": compact_profile,
+        "semantic_catalog": {
+            "dimensions": semantic.get("dimensions", []),
+            "measures": semantic.get("measures", []),
+            "date_columns": semantic.get("date_columns", []),
+        },
         "business_context": manifest.get("business_context", ""),
         "row_count_after_cleaning": manifest.get("rows_after"),
-        "sample_rows": sample_result["rows"],
+        "schema_context_note": (
+            "Column type and profile classifications are heuristic metadata; "
+            "verify business meaning with the user before making business-critical claims."
+        ),
     }
 
 
