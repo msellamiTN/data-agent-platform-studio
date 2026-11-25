@@ -99,6 +99,7 @@ def test_engineering_and_count_analysis_survive_crewai_import_failure(tmp_path, 
 
     analysis = scenarios.run_data_analysis("how many titre?")
     assert analysis["execution_mode"] == "validated_query_plan"
+    assert analysis["result_kind"] == "verified_aggregate"
     assert analysis["sql"] == 'SELECT COUNT("titre") AS "value_count" FROM silver_data'
     assert analysis["rows"] == [{"value_count": 3}]
     assert 'contains 3 non-null value(s)' in analysis["summary"]
@@ -112,6 +113,7 @@ def test_wrong_model_preview_is_overridden_by_count_plan(tmp_path, monkeypatch):
 
     analysis = scenarios.run_data_analysis("how many titre?")
     assert analysis["execution_mode"] == "validated_query_plan"
+    assert analysis["result_kind"] == "verified_aggregate"
     assert analysis["sql"] == 'SELECT COUNT("titre") AS "value_count" FROM silver_data'
     assert analysis["rows"] == [{"value_count": 3}]
     assert analysis["summary"] == 'Column "titre" contains 3 non-null value(s).'
